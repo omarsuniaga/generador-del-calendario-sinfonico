@@ -19,6 +19,7 @@ export interface ActivityRange {
   description?: string;
   status?: ActivityStatus;
   rescheduledToId?: string; 
+  completed?: boolean;  // Track if the activity has been completed
 }
 
 export interface DayStyle {
@@ -38,6 +39,7 @@ export interface NotificationLog {
   timestamp: number;
   message: string;
   type: 'info' | 'warning' | 'success' | 'ai';
+  relatedActivityIds?: string[];
 }
 
 export interface CalendarConfig {

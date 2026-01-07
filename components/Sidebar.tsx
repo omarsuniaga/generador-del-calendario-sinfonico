@@ -1,6 +1,5 @@
-
-import React, { useState, useRef } from 'react';
-import { CalendarState, ActivityRange, ProgramType, Category } from '../types';
+import React, { useState, useRef, useEffect } from 'react';
+import { CalendarState, ActivityRange, ProgramType, Category, NotificationLog } from '../types';
 import { format, endOfMonth, addDays, isValid } from 'date-fns';
 import { es } from 'date-fns/locale';
 import { 
@@ -26,6 +25,7 @@ import {
   Upload,
   FileSpreadsheet,
   AlertCircle,
+  AlertTriangle,
   FileBox,
   CalendarClock,
   RotateCcw,
@@ -34,9 +34,11 @@ import {
   Type,
   Info,
   Layers,
-  Bell
+  Bell,
+  Zap,
+  Eye
 } from 'lucide-react';
-import { parseNaturalLanguageActivity, getMusicalSuggestions, generateInstitutionalPlan } from '../services/geminiService';
+import { parseNaturalLanguageActivity, getMusicalSuggestions, generateInstitutionalPlan, getSmartCategorySuggestion } from '../services/geminiService';
 import { toPng } from 'html-to-image';
 import { jsPDF } from 'jspdf';
 import { Document, Packer, Paragraph, TextRun, HeadingLevel, Table, TableRow, TableCell, WidthType, AlignmentType, BorderStyle } from 'docx';
@@ -53,6 +55,7 @@ interface SidebarProps {
   onAddCategory: (category: Category) => void;
   onUpdateCategory: (category: Category) => void;
   onRemoveCategory: (id: string) => void;
+  onHighlightActivities: (ids: string[]) => void;
   selectedMonth: number;
   setSelectedMonth: (m: number) => void;
   selectedActivityId: string | null;
@@ -64,24 +67,19 @@ const parseSafeDate = (dateStr: string) => {
   return new Date(year, month - 1, day);
 };
 
-// Fixed: Replaced missing date-fns 'parse' with simplified native logic for common formats
 const parseFlexibleDate = (input: string, defaultYear: number): Date | null => {
-  const cleanInput = input.trim().toLowerCase();
+  const cleanInput = input?.trim().toLowerCase();
   if (!cleanInput) return null;
   
-  // Try native date parsing first
   let d = new Date(cleanInput);
   if (isValid(d) && d.getFullYear() > 1900) return d;
 
-  // Manual fallback for common Spanish/numeric formats since date-fns 'parse' is reported missing
-  // Supports DD/MM/YYYY
   const dmy = cleanInput.match(/^(\d{1,2})[\/\- ](\d{1,2})[\/\- ](\d{4})$/);
   if (dmy) {
     const d = new Date(parseInt(dmy[3]), parseInt(dmy[2]) - 1, parseInt(dmy[1]));
     if (isValid(d)) return d;
   }
 
-  // Supports DD/MM (assume defaultYear)
   const dm = cleanInput.match(/^(\d{1,2})[\/\- ](\d{1,2})$/);
   if (dm) {
     const d = new Date(defaultYear, parseInt(dm[2]) - 1, parseInt(dm[1]));
@@ -103,6 +101,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
   onAddCategory,
   onUpdateCategory,
   onRemoveCategory,
+  onHighlightActivities,
   selectedMonth,
   setSelectedMonth,
   selectedActivityId,
@@ -130,7 +129,6 @@ export const Sidebar: React.FC<SidebarProps> = ({
   const [newCatName, setNewCatName] = useState('');
   const [newCatColor, setNewCatColor] = useState('#6366f1');
   const [editingCatId, setEditingCatId] = useState<string | null>(null);
-  const [manualId, setManualId] = useState<string | null>(null);
   const [manualTitle, setManualTitle] = useState('');
   const [manualStart, setManualStart] = useState('');
   const [manualEnd, setManualEnd] = useState('');
@@ -138,7 +136,26 @@ export const Sidebar: React.FC<SidebarProps> = ({
   const [manualCat, setManualCat] = useState('');
   const [postponeDate, setPostponeDate] = useState('');
 
+  // Smart Suggestion State
+  const [smartSuggestion, setSmartSuggestion] = useState<any>(null);
+  const [isSuggesting, setIsSuggesting] = useState(false);
+
   const months = ['Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio', 'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre'];
+
+  // Effect to get smart category suggestions when title changes
+  useEffect(() => {
+    const timer = setTimeout(async () => {
+      if (manualTitle.length > 5) {
+        setIsSuggesting(true);
+        const suggestion = await getSmartCategorySuggestion(manualTitle, "", state.categories);
+        setSmartSuggestion(suggestion);
+        setIsSuggesting(false);
+      } else {
+        setSmartSuggestion(null);
+      }
+    }, 1000);
+    return () => clearTimeout(timer);
+  }, [manualTitle]);
 
   const toggleSection = (section: string) => {
     setOpenSections(prev => ({ ...prev, [section]: !prev[section] }));
@@ -161,6 +178,22 @@ export const Sidebar: React.FC<SidebarProps> = ({
     setNewCatName(cat.name);
     setNewCatColor(cat.color);
     if (!openSections.categories) toggleSection('categories');
+  };
+
+  const handleApplySmartSuggestion = () => {
+    if (!smartSuggestion) return;
+    if (smartSuggestion.existingCategoryId) {
+      setManualCat(smartSuggestion.existingCategoryId);
+    } else {
+      const newId = Math.random().toString(36).substr(2, 9);
+      onAddCategory({
+        id: newId,
+        name: smartSuggestion.suggestedName,
+        color: smartSuggestion.suggestedColor
+      });
+      setManualCat(newId);
+    }
+    setSmartSuggestion(null);
   };
 
   const handleMagicFill = async () => {
@@ -207,16 +240,21 @@ export const Sidebar: React.FC<SidebarProps> = ({
   const processCsv = (text: string) => {
     const lines = text.split(/\r?\n/).filter(l => l.trim() !== '');
     if (lines.length === 0) return;
+    
     const firstLine = lines[0];
     const delimiter = firstLine.includes(';') ? ';' : ',';
     const hasNumbers = /[0-9]/.test(firstLine);
     const hasHeaders = !hasNumbers;
     const dataRows = hasHeaders ? lines.slice(1) : lines;
     const headerCols = hasHeaders ? firstLine.toLowerCase().split(delimiter).map(c => c.trim()) : [];
+    
     let addedCount = 0;
+    let errorCount = 0;
+    
     dataRows.forEach(row => {
       const values = row.split(delimiter).map(v => v.trim());
       const entry: any = {};
+      
       if (hasHeaders) {
         headerCols.forEach((h, index) => {
           const v = values[index];
@@ -233,34 +271,48 @@ export const Sidebar: React.FC<SidebarProps> = ({
         entry.program = values[3];
         entry.categoryName = values[4];
       }
+
       const parsedStart = parseFlexibleDate(entry.startDate, state.config.year);
       const parsedEnd = entry.endDate ? parseFlexibleDate(entry.endDate, state.config.year) : parsedStart;
-      if (entry.title && parsedStart) {
+      
+      if (entry.title && parsedStart && parsedEnd) {
         let program: ProgramType = 'General';
         const pLower = entry.program?.toLowerCase() || '';
         if (pLower.includes('orq')) program = 'Orquesta';
         else if (pLower.includes('coro inf')) program = 'Coro Infantil';
         else if (pLower.includes('coro juv')) program = 'Coro Juvenil';
         else if (pLower.includes('coro')) program = 'Coro';
-        const cat = state.categories.find(c => c.name.toLowerCase() === entry.categoryName?.toLowerCase() || entry.title.toLowerCase().includes(c.name.toLowerCase()));
+        
+        const cat = state.categories.find(c => 
+          c.name.toLowerCase() === entry.categoryName?.toLowerCase() || 
+          entry.title.toLowerCase().includes(c.name.toLowerCase())
+        );
+
+        const finalEnd = parsedEnd < parsedStart ? parsedStart : parsedEnd;
+
         onAddActivity({
           id: Math.random().toString(36).substr(2, 9),
           title: entry.title,
           startDate: format(parsedStart, 'yyyy-MM-dd'),
-          endDate: format(parsedEnd || parsedStart, 'yyyy-MM-dd'),
+          endDate: format(finalEnd, 'yyyy-MM-dd'),
           program: program,
           categoryId: cat?.id || state.categories[0]?.id,
           color: cat?.color || '#3b82f6',
           status: 'active'
         });
         addedCount++;
+      } else {
+        errorCount++;
       }
     });
+
     if (addedCount > 0) {
-      alert(`Se han importado ${addedCount} actividades.`);
+      alert(`Se han importado ${addedCount} actividades.${errorCount > 0 ? ` Se omitieron ${errorCount} filas por errores de formato o fechas inválidas.` : ''}`);
       setCsvTextInput('');
+    } else if (errorCount > 0) {
+      alert(`No se pudo importar ninguna actividad. Se detectaron ${errorCount} filas con errores (falta título o fechas no válidas).`);
     } else {
-      alert('Formato inválido. Use: Fecha Inicio, Fecha Fin, Actividad, Programa, Categoría');
+      alert('Formato de datos no reconocido. Asegúrese de incluir al menos: Fecha Inicio y Actividad.');
     }
   };
 
@@ -342,7 +394,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
     if (!manualTitle || !manualStart) return;
     const cat = state.categories.find(c => c.id === manualCat);
     onAddActivity({
-      id: manualId || Math.random().toString(36).substr(2, 9),
+      id: Math.random().toString(36).substr(2, 9),
       title: manualTitle,
       startDate: manualStart,
       endDate: manualEnd || manualStart,
@@ -369,7 +421,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
         <div className={`p-2 rounded-lg transition-colors ${openSections[id] ? 'bg-indigo-100 text-indigo-600' : 'bg-gray-50 text-gray-400 group-hover:bg-gray-100'}`}>
           <Icon size={16} />
         </div>
-        <span className={`text-[11px] font-black uppercase tracking-widest ${openSections[id] ? 'text-gray-900' : 'text-gray-500'}`}>
+        <span className={`text-[11px] font-black uppercase tracking-widest ${openSections[id] ? 'text-gray-900' : 'text-gray-50'}`}>
           {title} {count !== undefined && <span className="ml-1 opacity-40">[{count}]</span>}
         </span>
       </div>
@@ -400,7 +452,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
               <div className="relative">
                 <input 
                   type="text" placeholder="Título de la actividad"
-                  className="w-full px-3 py-2.5 pr-10 border border-gray-100 rounded-xl text-[11px] outline-none focus:ring-2 focus:ring-indigo-500/20 font-medium bg-gray-50/30"
+                  className={`w-full px-3 py-2.5 pr-10 border rounded-xl text-[11px] outline-none transition-all focus:ring-2 focus:ring-indigo-500/20 font-medium ${smartSuggestion ? 'border-indigo-200 bg-indigo-50/10' : 'border-gray-100 bg-gray-50/30'}`}
                   value={manualTitle} onChange={e => setManualTitle(e.target.value)}
                 />
                 <button 
@@ -410,17 +462,58 @@ export const Sidebar: React.FC<SidebarProps> = ({
                   {isAiLoading ? <div className="w-3.5 h-3.5 border-2 border-indigo-400 border-t-transparent animate-spin rounded-full"></div> : <Wand2 size={16} />}
                 </button>
               </div>
+
+              {/* SMART CATEGORY SUGGESTION UI */}
+              {isSuggesting && (
+                <div className="flex items-center gap-2 px-2 py-1 bg-gray-50 rounded-lg animate-pulse">
+                   <Zap size={10} className="text-indigo-400" />
+                   <span className="text-[9px] text-gray-400 font-bold uppercase tracking-widest">IA analizando...</span>
+                </div>
+              )}
+
+              {smartSuggestion && (
+                <div className="p-2.5 bg-indigo-600 rounded-xl border border-indigo-400/30 shadow-sm animate-in zoom-in-95 duration-300">
+                  <div className="flex items-start gap-3">
+                    <div className="mt-1">
+                      <Sparkles size={14} className="text-white animate-pulse" />
+                    </div>
+                    <div className="flex-1">
+                      <p className="text-[10px] font-black text-white uppercase tracking-wider leading-tight">
+                        {smartSuggestion.existingCategoryId ? "IA sugiere categoría existente" : "Sugerencia: Nueva categoría"}
+                      </p>
+                      <div className="mt-1.5 flex items-center justify-between gap-2">
+                         <div className="flex items-center gap-1.5 overflow-hidden">
+                           <div className="w-2 h-2 rounded-full shrink-0" style={{ backgroundColor: smartSuggestion.suggestedColor || state.categories.find(c => c.id === smartSuggestion.existingCategoryId)?.color }}></div>
+                           <span className="text-[9px] font-bold text-indigo-50 truncate">
+                             {smartSuggestion.suggestedName || state.categories.find(c => c.id === smartSuggestion.existingCategoryId)?.name}
+                           </span>
+                         </div>
+                         <button 
+                          onClick={handleApplySmartSuggestion}
+                          className="px-2 py-1 bg-white/20 hover:bg-white/30 text-white rounded-lg text-[8px] font-black uppercase tracking-widest transition-all"
+                         >
+                           Aplicar
+                         </button>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              )}
+
               <div className="grid grid-cols-2 gap-3">
                 <input type="date" className="w-full text-[10px] border border-gray-100 rounded-xl p-2 bg-gray-50/30" value={manualStart} onChange={e => setManualStart(e.target.value)} />
                 <input type="date" className="w-full text-[10px] border border-gray-100 rounded-xl p-2 bg-gray-50/30" value={manualEnd} onChange={e => setManualEnd(e.target.value)} />
               </div>
-              <select 
-                className="w-full text-[10px] border border-gray-100 rounded-xl p-2.5 bg-gray-50/30 font-medium"
-                value={manualCat} onChange={e => setManualCat(e.target.value)}
-              >
-                <option value="">Seleccionar Categoría</option>
-                {state.categories.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
-              </select>
+              <div className="relative">
+                <select 
+                  className={`w-full text-[10px] border rounded-xl p-2.5 font-medium transition-all ${smartSuggestion ? 'border-indigo-400 ring-4 ring-indigo-50' : 'border-gray-100 bg-gray-50/30'}`}
+                  value={manualCat} onChange={e => setManualCat(e.target.value)}
+                >
+                  <option value="">Seleccionar Categoría</option>
+                  {state.categories.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+                </select>
+                {smartSuggestion && <div className="absolute -top-2 -right-1 w-3 h-3 bg-indigo-500 rounded-full animate-ping"></div>}
+              </div>
               <button onClick={handleManualAction} className="w-full bg-gray-900 text-white text-[10px] font-black py-3 rounded-xl uppercase tracking-widest hover:bg-black transition-all shadow-lg shadow-gray-100">
                 Añadir al Calendario
               </button>
@@ -573,23 +666,33 @@ export const Sidebar: React.FC<SidebarProps> = ({
           )}
         </div>
 
-        {/* NEW SECTION: AI NOTIFICATIONS */}
+        {/* 6. NOTIFICACIONES IA */}
         <div className="border-b border-gray-50 pb-2">
           <SectionHeader id="ai_notifs" icon={Bell} title="Notificaciones IA" count={aiNotifications.length} />
           {openSections.ai_notifs && (
             <div className="p-3 space-y-3 animate-in fade-in slide-in-from-top-1 duration-200 max-h-60 overflow-y-auto custom-scrollbar">
               {aiNotifications.length > 0 ? (
                 aiNotifications.map((notif) => (
-                  <div key={notif.id} className="p-3 bg-indigo-50/50 rounded-xl border border-indigo-100 flex gap-3 group">
-                    <div className="shrink-0 p-2 bg-white rounded-lg text-indigo-600 shadow-sm self-start">
-                      <Sparkles size={12} />
+                  <div key={notif.id} className="p-3 bg-indigo-50/50 rounded-xl border border-indigo-100 flex flex-col gap-3 group transition-all hover:bg-indigo-50">
+                    <div className="flex gap-3">
+                      <div className="shrink-0 p-2 bg-white rounded-lg text-indigo-600 shadow-sm self-start">
+                        {notif.relatedActivityIds && notif.relatedActivityIds.length > 0 ? <AlertTriangle size={12} /> : <Sparkles size={12} />}
+                      </div>
+                      <div className="space-y-1 flex-1">
+                        <p className="text-[10px] font-bold text-indigo-900 leading-relaxed">{notif.message.replace('IA: ', '')}</p>
+                        <p className="text-[8px] font-black uppercase text-indigo-400 tracking-widest">
+                          {format(new Date(notif.timestamp), 'p', { locale: es })}
+                        </p>
+                      </div>
                     </div>
-                    <div className="space-y-1">
-                      <p className="text-[10px] font-bold text-indigo-900 leading-relaxed">{notif.message.replace('IA: ', '')}</p>
-                      <p className="text-[8px] font-black uppercase text-indigo-400 tracking-widest">
-                        {format(new Date(notif.timestamp), 'p', { locale: es })}
-                      </p>
-                    </div>
+                    {notif.relatedActivityIds && notif.relatedActivityIds.length > 0 && (
+                      <button 
+                        onClick={() => onHighlightActivities(notif.relatedActivityIds!)}
+                        className="flex items-center justify-center gap-2 w-full py-1.5 bg-indigo-600 text-white rounded-lg text-[9px] font-black uppercase tracking-widest hover:bg-indigo-700 transition-all"
+                      >
+                        <Eye size={12} /> Ver conflicto
+                      </button>
+                    )}
                   </div>
                 ))
               ) : (
@@ -599,7 +702,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
           )}
         </div>
 
-        {/* 6. IMPORTAR EVENTOS */}
+        {/* 7. IMPORTAR EVENTOS */}
         <div className="border-b border-gray-50 pb-2">
           <SectionHeader id="import" icon={FileUp} title="Importar Eventos" />
           {openSections.import && (
@@ -632,7 +735,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
           )}
         </div>
 
-        {/* 7. EXPORTAR */}
+        {/* 8. EXPORTAR */}
         <div className="pb-2">
           <SectionHeader id="export" icon={Share2} title="Exportar" />
           {openSections.export && (
@@ -653,7 +756,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
           )}
         </div>
 
-        {/* INSTITUTIONAL SETTINGS (Extra at bottom) */}
+        {/* INSTITUTIONAL SETTINGS */}
         <div className="mt-8 pt-4 border-t border-gray-50 opacity-40 hover:opacity-100 transition-opacity">
            <SectionHeader id="institution" icon={Settings} title="Ajustes Institucionales" />
            {openSections.institution && (

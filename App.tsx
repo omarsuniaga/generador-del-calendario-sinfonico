@@ -1,5 +1,5 @@
 
-import React, { useState, useCallback, useEffect } from 'react';
+import React, { useState, useCallback, useEffect, useMemo } from 'react';
 import { Sidebar } from './components/Sidebar';
 import { CalendarCanvas } from './components/CalendarCanvas';
 import { CalendarState, ActivityRange, ProgramType, DayStyle, Category, NotificationLog } from './types';
@@ -7,9 +7,10 @@ import {
   Bell, Info, X, Flag, CheckCircle2, Menu, ChevronLeft, ChevronRight, 
   Sparkles, History, Calendar as CalendarIcon, Tag, HelpCircle, 
   Music, Mic, Disc, Piano, Guitar, Drum, Volume2, Users, Star, 
-  Award, Heart, Coffee, Utensils, MapPin, AlertTriangle, Lightbulb
+  Award, Heart, Coffee, Utensils, MapPin, AlertTriangle, Lightbulb,
+  PlusCircle, LayoutList, CalendarClock, Check
 } from 'lucide-react';
-import { format, isWithinInterval, addDays } from 'date-fns';
+import { format, isWithinInterval, addDays, isSameDay } from 'date-fns';
 import { es } from 'date-fns/locale';
 import { analyzeCalendarConflicts } from './services/geminiService';
 
@@ -46,9 +47,14 @@ const App: React.FC = () => {
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
   const [selectedActivityId, setSelectedActivityId] = useState<string | null>(null);
+  const [highlightedActivityIds, setHighlightedActivityIds] = useState<string[]>([]);
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [showNotificationLog, setShowNotificationLog] = useState(false);
   const [showAiHelp, setShowAiHelp] = useState(false);
+
+  // Modal Activity State (for adding activities through the day modal)
+  const [modalActivityTitle, setModalActivityTitle] = useState('');
+  const [modalActivityProgram, setModalActivityProgram] = useState<ProgramType>('General');
 
   useEffect(() => {
     localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
@@ -61,19 +67,22 @@ const App: React.FC = () => {
     }));
   }, []);
 
-  const addNotification = useCallback((msg: string, type: NotificationLog['type'] = 'info') => {
+  const addNotification = useCallback((msg: string, type: NotificationLog['type'] = 'info', relatedActivityIds?: string[]) => {
     const id = Math.random().toString();
     const newNotif: NotificationLog = {
       id,
       timestamp: Date.now(),
       message: msg,
-      type
+      type,
+      relatedActivityIds
     };
     setState(prev => ({
       ...prev,
       notifications: [newNotif, ...prev.notifications].slice(0, 50)
     }));
-    setTimeout(() => removeNotification(id), 5000);
+    if (type !== 'ai') {
+      setTimeout(() => removeNotification(id), 5000);
+    }
   }, [removeNotification]);
 
   const runAiAnalysis = async () => {
@@ -81,7 +90,7 @@ const App: React.FC = () => {
     setIsAnalyzing(true);
     const conflicts = await analyzeCalendarConflicts(state.activities);
     conflicts.forEach((c: any) => {
-      addNotification(`IA: ${c.message}`, c.severity === 'warning' ? 'ai' : 'info');
+      addNotification(`IA: ${c.message}`, c.severity === 'warning' ? 'ai' : 'info', c.involvedActivityIds);
     });
     setIsAnalyzing(false);
   };
@@ -102,6 +111,15 @@ const App: React.FC = () => {
     }));
   };
 
+  const handleToggleActivityComplete = (id: string) => {
+    setState(prev => ({
+      ...prev,
+      activities: prev.activities.map(a => 
+        a.id === id ? { ...a, completed: !a.completed } : a
+      )
+    }));
+  };
+
   const handleRemoveActivity = (id: string) => {
     setState(prev => ({ ...prev, activities: prev.activities.filter(a => a.id !== id) }));
   };
@@ -115,10 +133,8 @@ const App: React.FC = () => {
       const original = activities[idx];
       const newActivityId = Math.random().toString(36).substr(2, 9);
       
-      // Update original status
       activities[idx] = { ...original, status: 'postponed', rescheduledToId: newActivityId };
       
-      // Add new rescheduled activity
       const rescheduled: ActivityRange = {
         ...original,
         id: newActivityId,
@@ -166,34 +182,113 @@ const App: React.FC = () => {
   };
 
   const handleSelectDay = (date: string) => {
-    const existing = state.dayStyles.find(s => {
+    const existingStyle = state.dayStyles.find(s => {
         if (!s.endDate) return s.startDate === date;
-        // Fixed: Replaced missing parseISO with native Date parsing for interval checking
         const d = new Date(date);
         const start = new Date(s.startDate);
         const end = new Date(s.endDate);
         return isWithinInterval(d, { start, end });
     });
-    setEditingDayId(existing?.id || null);
+
+    // Check if there's an existing activity starting on this date to pre-fill
+    const existingActivity = state.activities.find(a => a.startDate === date);
+    if (existingActivity) {
+      setModalActivityTitle(existingActivity.title);
+      setModalActivityProgram(existingActivity.program);
+    } else {
+      setModalActivityTitle('');
+      setModalActivityProgram('General');
+    }
+
+    setEditingDayId(existingStyle?.id || null);
     setEditingDate(date);
   };
 
-  const updateDayStyle = (id: string | null, date: string, update: Partial<DayStyle>) => {
+  const updateDayStyle = useCallback((id: string | null, date: string, update: Partial<DayStyle>) => {
     setState(prev => {
       const newStyles = [...prev.dayStyles];
+      const cleanUpdate = { ...update };
+      if (cleanUpdate.endDate === '') {
+        cleanUpdate.endDate = undefined;
+      }
+      
       if (id) {
         const idx = newStyles.findIndex(s => s.id === id);
-        if (idx > -1) newStyles[idx] = { ...newStyles[idx], ...update };
+        if (idx > -1) newStyles[idx] = { ...newStyles[idx], ...cleanUpdate };
       } else {
         const newId = Math.random().toString(36).substr(2, 9);
-        newStyles.push({ id: newId, startDate: date, ...update });
+        newStyles.push({ id: newId, startDate: date, ...cleanUpdate });
         setEditingDayId(newId);
       }
       return { ...prev, dayStyles: newStyles };
     });
-  };
+  }, []);
 
   const currentDayStyle = editingDayId ? state.dayStyles.find(s => s.id === editingDayId) : null;
+
+  const handleEndDateFocus = useCallback(() => {
+    const startDateStr = currentDayStyle?.startDate || editingDate;
+    const currentEndDate = currentDayStyle?.endDate;
+    
+    if (startDateStr && !currentEndDate) {
+      try {
+        const startDate = new Date(startDateStr);
+        const suggestedEndDate = addDays(startDate, 7);
+        const formattedEndDate = format(suggestedEndDate, 'yyyy-MM-dd');
+        updateDayStyle(editingDayId, editingDate!, { endDate: formattedEndDate });
+      } catch (error) {
+        console.warn('Could not auto-fill end date:', error);
+      }
+    }
+  }, [currentDayStyle, editingDate, editingDayId, updateDayStyle]);
+
+  // Unified save logic for modal
+  const handleModalConfirm = () => {
+    if (!editingDate) return;
+
+    // 1. Save Activity if title is provided
+    if (modalActivityTitle.trim()) {
+      const startDate = currentDayStyle?.startDate || editingDate;
+      const endDate = currentDayStyle?.endDate || startDate;
+      const cat = state.categories.find(c => c.id === currentDayStyle?.categoryId);
+
+      const existingActivity = state.activities.find(a => a.startDate === editingDate);
+      
+      if (existingActivity) {
+        handleUpdateActivity({
+          ...existingActivity,
+          title: modalActivityTitle,
+          program: modalActivityProgram,
+          startDate,
+          endDate,
+          categoryId: currentDayStyle?.categoryId,
+          color: cat?.color || existingActivity.color
+        });
+      } else {
+        handleAddActivity({
+          id: Math.random().toString(36).substr(2, 9),
+          title: modalActivityTitle,
+          startDate,
+          endDate,
+          program: modalActivityProgram,
+          categoryId: currentDayStyle?.categoryId,
+          color: cat?.color || '#3b82f6',
+          status: 'active'
+        });
+      }
+    }
+
+    setEditingDate(null);
+    setEditingDayId(null);
+    setModalActivityTitle('');
+    addNotification('Día y actividades actualizados correctamente', 'success');
+  };
+
+  const handleHighlightActivities = useCallback((ids: string[]) => {
+    setHighlightedActivityIds(ids);
+    // Auto-clear highlight after 8 seconds
+    setTimeout(() => setHighlightedActivityIds([]), 8000);
+  }, []);
 
   const ICONS_LIBRARY = [
     { id: 'piano', icon: <Piano size={20} />, emoji: '🎹' },
@@ -241,13 +336,13 @@ const App: React.FC = () => {
             onPostponeActivity={handlePostponeActivity}
             onSuspendActivity={handleSuspendActivity}
             onReactivateActivity={handleReactivateActivity}
+            onHighlightActivities={handleHighlightActivities}
           />
         </div>
       </div>
 
       {/* Main App */}
       <div className={`flex-1 flex flex-col transition-all duration-500 bg-white relative`}>
-        {/* Header bar */}
         <div className="bg-white border-b border-gray-50 h-16 flex items-center justify-between px-8 shrink-0 relative z-10">
            <div className="flex items-center gap-4">
               <button 
@@ -292,15 +387,18 @@ const App: React.FC = () => {
             selectedMonth={selectedMonth} 
             onSelectDay={handleSelectDay}
             selectedActivityId={selectedActivityId}
+            highlightedActivityIds={highlightedActivityIds}
+            onSelectActivity={setSelectedActivityId}
+            onToggleComplete={handleToggleActivityComplete}
             isSidebarCollapsed={isSidebarCollapsed}
           />
         </div>
       </div>
 
-      {/* MODAL REDISEÑADO: Personalizar Día */}
+      {/* MODAL REDISEÑADO: Personalizar Día y Eventos */}
       {editingDate && (
         <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-[150] p-4 backdrop-blur-[2px] animate-in fade-in duration-300">
-          <div className="bg-white w-full max-w-lg rounded-[2.5rem] shadow-2xl p-10 relative flex flex-col animate-in zoom-in-95 slide-in-from-bottom-10 duration-500">
+          <div className="bg-white w-full max-w-xl rounded-[2.5rem] shadow-2xl p-10 relative flex flex-col animate-in zoom-in-95 slide-in-from-bottom-10 duration-500">
             <button 
               onClick={() => {setEditingDate(null); setEditingDayId(null);}} 
               className="absolute top-8 right-8 text-gray-400 hover:text-gray-900 p-2 hover:bg-gray-100 rounded-full transition-all"
@@ -308,40 +406,56 @@ const App: React.FC = () => {
               <X size={24} />
             </button>
             
-            <h2 className="text-[26px] font-black text-gray-900 mb-8 tracking-tighter">Personalizar Día</h2>
+            <div className="flex items-center gap-4 mb-8">
+               <div className="p-3 bg-indigo-600 rounded-2xl text-white shadow-xl shadow-indigo-100">
+                  <CalendarClock size={28} />
+               </div>
+               <div>
+                  <h2 className="text-[26px] font-black text-gray-900 tracking-tighter leading-none">Gestión del Día</h2>
+                  <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mt-1">Configurar celda y cronograma</p>
+               </div>
+            </div>
             
-            <div className="space-y-8 overflow-y-auto pr-2 custom-scrollbar max-h-[70vh]">
+            <div className="space-y-8 overflow-y-auto pr-4 custom-scrollbar max-h-[65vh]">
                
-               {/* BANNER FERIADO */}
-               <div className="bg-red-50/50 p-5 rounded-[1.5rem] flex items-center justify-between border border-red-100/50 group hover:bg-red-50 transition-all cursor-pointer" onClick={() => updateDayStyle(editingDayId, editingDate, { isHoliday: !currentDayStyle?.isHoliday })}>
-                  <div className="flex items-center gap-4">
-                    <div className="bg-red-500 p-2.5 rounded-xl shadow-lg shadow-red-100 group-hover:scale-110 transition-all">
-                      <Flag className="text-white" size={18} />
+               {/* SECCIÓN 1: EVENTO / ACTIVIDAD */}
+               <div className="p-6 bg-indigo-50/30 rounded-[2rem] border border-indigo-100/50 space-y-5">
+                  <div className="flex items-center gap-2 px-1">
+                    <PlusCircle size={14} className="text-indigo-600" />
+                    <span className="text-[10px] font-black text-indigo-900 uppercase tracking-widest">Actividad del Cronograma</span>
+                  </div>
+                  
+                  <div className="space-y-3">
+                    <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest block px-1">Título del Evento</label>
+                    <input 
+                      type="text" value={modalActivityTitle}
+                      onChange={(e) => setModalActivityTitle(e.target.value)}
+                      placeholder="Ej: Ensayo General / Concierto Gala"
+                      className="w-full px-5 py-4 border border-indigo-100 rounded-2xl outline-none focus:ring-2 focus:ring-indigo-500/20 text-sm font-bold shadow-inner bg-white"
+                    />
+                  </div>
+
+                  <div className="space-y-3">
+                    <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest block px-1">Programa Musical</label>
+                    <div className="grid grid-cols-2 gap-2">
+                       {['Orquesta', 'Coro', 'Coro Infantil', 'Coro Juvenil', 'General'].map(p => (
+                         <button
+                           key={p}
+                           onClick={() => setModalActivityProgram(p as ProgramType)}
+                           className={`py-3 px-4 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all border ${
+                             modalActivityProgram === p 
+                             ? 'bg-indigo-600 text-white border-indigo-600 shadow-lg' 
+                             : 'bg-white text-gray-400 border-gray-100 hover:border-indigo-200'
+                           }`}
+                         >
+                           {p}
+                         </button>
+                       ))}
                     </div>
-                    <span className="text-[11px] font-black text-red-900 uppercase tracking-widest">Día Feriado / No Laborable</span>
-                  </div>
-                  <div className={`w-6 h-6 rounded-lg border-2 transition-all flex items-center justify-center ${currentDayStyle?.isHoliday ? 'bg-red-500 border-red-500' : 'border-red-200 bg-white'}`}>
-                    {currentDayStyle?.isHoliday && <X className="text-white" size={14} />}
                   </div>
                </div>
 
-               {/* CATEGORÍA SELECTOR */}
-               <div className="space-y-3">
-                 <div className="flex items-center gap-2">
-                    <Tag size={14} className="text-indigo-400" />
-                    <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest">Escoger Categoría</label>
-                 </div>
-                 <select 
-                    value={currentDayStyle?.categoryId || ''}
-                    onChange={(e) => updateDayStyle(editingDayId, editingDate, { categoryId: e.target.value })}
-                    className="w-full px-5 py-4 border border-gray-100 rounded-2xl outline-none focus:ring-2 focus:ring-indigo-500/20 text-sm font-bold bg-gray-50/50"
-                 >
-                   <option value="">Ninguna categoría</option>
-                   {state.categories.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
-                 </select>
-               </div>
-
-               {/* RANGO DE FECHAS */}
+               {/* SECCIÓN 2: RANGO DE FECHAS */}
                <div className="grid grid-cols-2 gap-4">
                  <div className="space-y-3">
                    <div className="flex items-center gap-2">
@@ -350,7 +464,7 @@ const App: React.FC = () => {
                    </div>
                    <input 
                     type="date" value={currentDayStyle?.startDate || editingDate}
-                    onChange={(e) => updateDayStyle(editingDayId, editingDate, { startDate: e.target.value })}
+                    onChange={(e) => updateDayStyle(editingDayId, editingDate!, { startDate: e.target.value })}
                     className="w-full px-5 py-4 border border-gray-100 rounded-2xl text-[11px] font-bold bg-gray-50/50"
                    />
                  </div>
@@ -359,53 +473,85 @@ const App: React.FC = () => {
                       <CalendarIcon size={14} className="text-indigo-400" />
                       <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest text-xs">Hasta (Opcional)</label>
                    </div>
-                   <input 
-                    type="date" value={currentDayStyle?.endDate || ''}
-                    onChange={(e) => updateDayStyle(editingDayId, editingDate, { endDate: e.target.value })}
-                    className="w-full px-5 py-4 border border-gray-100 rounded-2xl text-[11px] font-bold bg-gray-50/50"
-                   />
+                   <div className="relative">
+                     <input 
+                      type="date" value={currentDayStyle?.endDate || ''}
+                      onChange={(e) => updateDayStyle(editingDayId, editingDate!, { endDate: e.target.value })}
+                      onFocus={handleEndDateFocus}
+                      className="w-full px-5 py-4 pr-12 border border-gray-100 rounded-2xl text-[11px] font-bold bg-gray-50/50"
+                     />
+                     {currentDayStyle?.endDate && (
+                       <button
+                         type="button"
+                         onClick={() => updateDayStyle(editingDayId, editingDate!, { endDate: '' })}
+                         className="absolute right-3 top-1/2 -translate-y-1/2 p-1.5 text-gray-400 hover:text-red-500 hover:bg-red-50 rounded-lg transition-all"
+                         title="Borrar fecha final"
+                       >
+                         <X size={14} />
+                       </button>
+                     )}
+                   </div>
                  </div>
                </div>
 
-               {/* ETIQUETA DEL DÍA */}
-               <div className="space-y-3">
-                 <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest block px-1">Etiqueta del Día</label>
-                 <input 
-                  type="text" value={currentDayStyle?.label || ''}
-                  onChange={(e) => updateDayStyle(editingDayId, editingDate, { label: e.target.value })}
-                  placeholder="Ej: Día de la Independencia"
-                  className="w-full px-5 py-4 border border-gray-100 rounded-2xl outline-none focus:ring-2 focus:ring-indigo-500/20 text-sm font-bold shadow-inner bg-white"
-                 />
-               </div>
+               {/* SECCIÓN 3: ESTILO DE CELDA (Anteriormente Personalizar Día) */}
+               <div className="space-y-6 pt-4 border-t border-gray-100">
+                  <div className="flex items-center gap-2 px-1">
+                    <LayoutList size={14} className="text-indigo-400" />
+                    <span className="text-[10px] font-black text-gray-400 uppercase tracking-widest">Apariencia en el Canvas</span>
+                  </div>
 
-               {/* BIBLIOTECA DE ICONOS */}
-               <div className="space-y-4">
-                  <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest block px-1">Biblioteca de Iconos</label>
-                  <div className="grid grid-cols-6 gap-3 bg-gray-50/50 p-6 rounded-[2rem] border border-gray-100">
-                    {ICONS_LIBRARY.map(item => (
-                      <button 
-                        key={item.id}
-                        onClick={() => updateDayStyle(editingDayId, editingDate, { icon: item.emoji })}
-                        className={`aspect-square flex flex-col items-center justify-center rounded-2xl transition-all ${
-                          currentDayStyle?.icon === item.emoji 
-                          ? 'bg-white shadow-xl shadow-indigo-100/50 border border-indigo-100 scale-110 ring-2 ring-indigo-50' 
-                          : 'hover:bg-white hover:shadow-md hover:scale-105 opacity-60 hover:opacity-100'
-                        }`}
-                        title={item.id}
-                      >
-                        <span className="text-2xl mb-1">{item.emoji}</span>
-                        <span className="text-[8px] font-black uppercase text-gray-400">{item.id}</span>
-                      </button>
-                    ))}
+                  <div className="bg-red-50/50 p-5 rounded-[1.5rem] flex items-center justify-between border border-red-100/50 group hover:bg-red-50 transition-all cursor-pointer" onClick={() => updateDayStyle(editingDayId, editingDate, { isHoliday: !currentDayStyle?.isHoliday })}>
+                    <div className="flex items-center gap-4">
+                      <div className="bg-red-500 p-2.5 rounded-xl shadow-lg shadow-red-100">
+                        <Flag className="text-white" size={18} />
+                      </div>
+                      <span className="text-[11px] font-black text-red-900 uppercase tracking-widest">Día Feriado / No Laborable</span>
+                    </div>
+                    <div className={`w-6 h-6 rounded-lg border-2 transition-all flex items-center justify-center ${currentDayStyle?.isHoliday ? 'bg-red-500 border-red-500' : 'border-red-200 bg-white'}`}>
+                      {currentDayStyle?.isHoliday && <CheckCircle2 className="text-white" size={14} />}
+                    </div>
+                  </div>
+
+                  <div className="space-y-3">
+                    <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest block px-1">Categoría Visual</label>
+                    <select 
+                        value={currentDayStyle?.categoryId || ''}
+                        onChange={(e) => updateDayStyle(editingDayId, editingDate, { categoryId: e.target.value })}
+                        className="w-full px-5 py-4 border border-gray-100 rounded-2xl outline-none focus:ring-2 focus:ring-indigo-500/20 text-sm font-bold bg-gray-50/50"
+                    >
+                      <option value="">Ninguna categoría</option>
+                      {state.categories.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+                    </select>
+                  </div>
+
+                  <div className="space-y-4">
+                      <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest block px-1">Biblioteca de Iconos</label>
+                      <div className="grid grid-cols-8 gap-3 bg-gray-50/50 p-6 rounded-[2rem] border border-gray-100">
+                        {ICONS_LIBRARY.map(item => (
+                          <button 
+                            key={item.id}
+                            onClick={() => updateDayStyle(editingDayId, editingDate, { icon: item.emoji })}
+                            className={`aspect-square flex flex-col items-center justify-center rounded-2xl transition-all ${
+                              currentDayStyle?.icon === item.emoji 
+                              ? 'bg-white shadow-xl shadow-indigo-100/50 border border-indigo-100 scale-110 ring-2 ring-indigo-50' 
+                              : 'hover:bg-white hover:shadow-md hover:scale-105 opacity-60 hover:opacity-100'
+                            }`}
+                            title={item.id}
+                          >
+                            <span className="text-xl">{item.emoji}</span>
+                          </button>
+                        ))}
+                      </div>
                   </div>
                </div>
             </div>
             
             <button 
-              onClick={() => {setEditingDate(null); setEditingDayId(null); addNotification('Día actualizado correctamente', 'success');}}
-              className="mt-10 bg-indigo-600 text-white py-5 rounded-[1.5rem] font-black uppercase tracking-[0.2em] text-[12px] shadow-2xl shadow-indigo-100 hover:bg-indigo-700 hover:-translate-y-1 transition-all active:scale-95"
+              onClick={handleModalConfirm}
+              className="mt-10 bg-indigo-600 text-white py-5 rounded-[1.5rem] font-black uppercase tracking-[0.2em] text-[12px] shadow-2xl shadow-indigo-200 hover:bg-indigo-700 hover:-translate-y-1 transition-all active:scale-95 flex items-center justify-center gap-3"
             >
-              Confirmar Cambios
+              <Check size={18} /> Confirmar Todo el Día
             </button>
           </div>
         </div>
