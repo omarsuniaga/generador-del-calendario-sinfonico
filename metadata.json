@@ -1,0 +1,7 @@
+{
+  "name": "Calendario Sinfónico - Generador",
+  "description": "A high-fidelity musical calendar platform for planning institutional activities with dynamic timelines, customizable shapes, and AI-powered scheduling.",
+  "requestFramePermissions": [
+    "camera"
+  ]
+}
