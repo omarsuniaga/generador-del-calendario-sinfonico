@@ -1,28 +1,30 @@
 
-import React, { useState, useCallback, useEffect, useMemo } from 'react';
-import { Sidebar } from './components/Sidebar';
-import { CalendarCanvas } from './components/CalendarCanvas';
-import { CalendarState, ActivityRange, ProgramType, DayStyle, Category, NotificationLog } from './types';
+import React, { useState, useCallback, useEffect } from 'react';
+import { Sidebar } from './components/Sidebar.tsx';
+import { CalendarCanvas } from './components/CalendarCanvas.tsx';
+import { CalendarState, ActivityRange, ProgramType, DayStyle, Category, NotificationLog } from './types.ts';
 import { 
-  Bell, Info, X, Flag, CheckCircle2, Menu, ChevronLeft, ChevronRight, 
-  Sparkles, History, Calendar as CalendarIcon, Tag, HelpCircle, 
-  Music, Mic, Disc, Piano, Guitar, Drum, Volume2, Users, Star, 
-  Award, Heart, Coffee, Utensils, MapPin, AlertTriangle, Lightbulb,
-  PlusCircle, LayoutList, CalendarClock, Check
+  Menu, ChevronLeft, ChevronRight, 
+  Sparkles, RotateCcw, AlignLeft,
+  X, CalendarClock, Flag, Circle, LayoutList, Check
 } from 'lucide-react';
-import { format, isWithinInterval, addDays, isSameDay } from 'date-fns';
+import { format, isWithinInterval, isValid } from 'date-fns';
 import { es } from 'date-fns/locale';
-import { analyzeCalendarConflicts } from './services/geminiService';
-import { ThemeToggle } from './components/ThemeToggle';
-import { useTheme } from './contexts/ThemeContext';
+import { analyzeCalendarConflicts } from './services/geminiService.ts';
+import { ThemeToggle } from './components/ThemeToggle.tsx';
+import { useTheme } from './contexts/ThemeContext.tsx';
 
 const STORAGE_KEY = 'sinfonia_calendar_data';
 
 const App: React.FC = () => {
   const { theme } = useTheme();
   const [state, setState] = useState<CalendarState>(() => {
-    const saved = localStorage.getItem(STORAGE_KEY);
-    if (saved) return JSON.parse(saved);
+    try {
+      const saved = localStorage.getItem(STORAGE_KEY);
+      if (saved) return JSON.parse(saved);
+    } catch (e) {
+      console.error("Error loading state from localStorage", e);
+    }
     
     return {
       config: {
@@ -52,23 +54,18 @@ const App: React.FC = () => {
   const [selectedActivityId, setSelectedActivityId] = useState<string | null>(null);
   const [highlightedActivityIds, setHighlightedActivityIds] = useState<string[]>([]);
   const [isAnalyzing, setIsAnalyzing] = useState(false);
-  const [showNotificationLog, setShowNotificationLog] = useState(false);
-  const [showAiHelp, setShowAiHelp] = useState(false);
 
-  // Modal Activity State (for adding activities through the day modal)
+  // Modal Activity State
   const [modalActivityTitle, setModalActivityTitle] = useState('');
+  const [modalActivityDescription, setModalActivityDescription] = useState('');
   const [modalActivityProgram, setModalActivityProgram] = useState<ProgramType>('General');
+  const [modalActivityCategoryId, setModalActivityCategoryId] = useState('');
+  const [modalActivityStartDate, setModalActivityStartDate] = useState('');
+  const [modalActivityEndDate, setModalActivityEndDate] = useState('');
 
   useEffect(() => {
     localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
   }, [state]);
-
-  const removeNotification = useCallback((id: string) => {
-    setState(prev => ({
-      ...prev,
-      notifications: prev.notifications.filter(n => n.id !== id)
-    }));
-  }, []);
 
   const addNotification = useCallback((msg: string, type: NotificationLog['type'] = 'info', relatedActivityIds?: string[]) => {
     const id = Math.random().toString();
@@ -84,17 +81,22 @@ const App: React.FC = () => {
       notifications: [newNotif, ...prev.notifications].slice(0, 50)
     }));
     if (type !== 'ai') {
-      setTimeout(() => removeNotification(id), 5000);
+      setTimeout(() => setState(p => ({...p, notifications: p.notifications.filter(n => n.id !== id)})), 8000);
     }
-  }, [removeNotification]);
+  }, []);
 
   const runAiAnalysis = async () => {
     if (state.activities.length === 0) return;
     setIsAnalyzing(true);
+    addNotification("Iniciando análisis de conflictos con IA...", "info");
     const conflicts = await analyzeCalendarConflicts(state.activities);
-    conflicts.forEach((c: any) => {
-      addNotification(`IA: ${c.message}`, c.severity === 'warning' ? 'ai' : 'info', c.involvedActivityIds);
-    });
+    if (conflicts && conflicts.length > 0) {
+      conflicts.forEach((c: any) => {
+        addNotification(`IA: ${c.message}`, c.severity === 'warning' ? 'ai' : 'info', c.involvedActivityIds);
+      });
+    } else {
+      addNotification("No se detectaron conflictos logísticos.", "success");
+    }
     setIsAnalyzing(false);
   };
 
@@ -114,95 +116,38 @@ const App: React.FC = () => {
     }));
   };
 
-  const handleToggleActivityComplete = (id: string) => {
-    setState(prev => ({
-      ...prev,
-      activities: prev.activities.map(a => 
-        a.id === id ? { ...a, completed: !a.completed } : a
-      )
-    }));
-  };
-
   const handleRemoveActivity = (id: string) => {
     setState(prev => ({ ...prev, activities: prev.activities.filter(a => a.id !== id) }));
-  };
-
-  const handlePostponeActivity = (id: string, newStart: string, newEnd: string) => {
-    setState(prev => {
-      const activities = [...prev.activities];
-      const idx = activities.findIndex(a => a.id === id);
-      if (idx === -1) return prev;
-
-      const original = activities[idx];
-      const newActivityId = Math.random().toString(36).substr(2, 9);
-      
-      activities[idx] = { ...original, status: 'postponed', rescheduledToId: newActivityId };
-      
-      const rescheduled: ActivityRange = {
-        ...original,
-        id: newActivityId,
-        startDate: newStart,
-        endDate: newEnd,
-        status: 'active',
-        title: `${original.title} (Re-programado)`,
-        rescheduledToId: undefined
-      };
-
-      return { ...prev, activities: [...activities, rescheduled] };
-    });
-    addNotification("Actividad pospuesta y reprogramada", "success");
-  };
-
-  const handleSuspendActivity = (id: string) => {
-    setState(prev => ({
-      ...prev,
-      activities: prev.activities.map(a => a.id === id ? { ...a, status: 'suspended' } : a)
-    }));
-    addNotification("Actividad suspendida", "warning");
-  };
-
-  const handleReactivateActivity = (id: string) => {
-    setState(prev => ({
-      ...prev,
-      activities: prev.activities.map(a => a.id === id ? { ...a, status: 'active' } : a)
-    }));
-    addNotification("Actividad reactivada", "success");
-  };
-
-  const handleAddCategory = (category: Category) => {
-    setState(prev => ({ ...prev, categories: [...prev.categories, category] }));
-  };
-
-  const handleUpdateCategory = (category: Category) => {
-    setState(prev => ({
-      ...prev,
-      categories: prev.categories.map(c => c.id === category.id ? category : c)
-    }));
-  };
-
-  const handleRemoveCategory = (id: string) => {
-    setState(prev => ({ ...prev, categories: prev.categories.filter(c => c.id !== id) }));
   };
 
   const handleSelectDay = (date: string) => {
     const existingStyle = state.dayStyles.find(s => {
         if (!s.endDate) return s.startDate === date;
-        const d = new Date(date);
-        const start = new Date(s.startDate);
-        const end = new Date(s.endDate);
-        return isWithinInterval(d, { start, end });
+        const d = new Date(date + 'T00:00:00');
+        return isWithinInterval(d, { 
+          start: new Date(s.startDate + 'T00:00:00'), 
+          end: new Date(s.endDate + 'T00:00:00') 
+        });
     });
-
-    // Check if there's an existing activity starting on this date to pre-fill
+    
     const existingActivity = state.activities.find(a => a.startDate === date);
+    
     if (existingActivity) {
       setModalActivityTitle(existingActivity.title);
+      setModalActivityDescription(existingActivity.description || '');
       setModalActivityProgram(existingActivity.program);
+      setModalActivityCategoryId(existingActivity.categoryId || '');
+      setModalActivityStartDate(existingActivity.startDate);
+      setModalActivityEndDate(existingActivity.endDate);
     } else {
       setModalActivityTitle('');
+      setModalActivityDescription('');
       setModalActivityProgram('General');
+      setModalActivityCategoryId('');
+      setModalActivityStartDate(date);
+      setModalActivityEndDate(date);
     }
-
+    
     setEditingDayId(existingStyle?.id || null);
     setEditingDate(date);
   };
@@ -210,400 +155,168 @@ const App: React.FC = () => {
   const updateDayStyle = useCallback((id: string | null, date: string, update: Partial<DayStyle>) => {
     setState(prev => {
       const newStyles = [...prev.dayStyles];
-      const cleanUpdate = { ...update };
-      if (cleanUpdate.endDate === '') {
-        cleanUpdate.endDate = undefined;
-      }
-      
       if (id) {
         const idx = newStyles.findIndex(s => s.id === id);
-        if (idx > -1) newStyles[idx] = { ...newStyles[idx], ...cleanUpdate };
+        if (idx > -1) newStyles[idx] = { ...newStyles[idx], ...update };
       } else {
         const newId = Math.random().toString(36).substr(2, 9);
-        newStyles.push({ id: newId, startDate: date, ...cleanUpdate });
+        newStyles.push({ id: newId, startDate: date, ...update });
         setEditingDayId(newId);
       }
       return { ...prev, dayStyles: newStyles };
     });
   }, []);
 
-  const currentDayStyle = editingDayId ? state.dayStyles.find(s => s.id === editingDayId) : null;
-
-  const handleEndDateFocus = useCallback(() => {
-    const startDateStr = currentDayStyle?.startDate || editingDate;
-    const currentEndDate = currentDayStyle?.endDate;
-    
-    if (startDateStr && !currentEndDate) {
-      try {
-        const startDate = new Date(startDateStr);
-        const suggestedEndDate = addDays(startDate, 7);
-        const formattedEndDate = format(suggestedEndDate, 'yyyy-MM-dd');
-        updateDayStyle(editingDayId, editingDate!, { endDate: formattedEndDate });
-      } catch (error) {
-        console.warn('Could not auto-fill end date:', error);
-      }
-    }
-  }, [currentDayStyle, editingDate, editingDayId, updateDayStyle]);
-
-  // Unified save logic for modal
   const handleModalConfirm = () => {
     if (!editingDate) return;
-
-    // 1. Save Activity if title is provided
     if (modalActivityTitle.trim()) {
-      const startDate = currentDayStyle?.startDate || editingDate;
-      const endDate = currentDayStyle?.endDate || startDate;
-      const cat = state.categories.find(c => c.id === currentDayStyle?.categoryId);
-
-      const existingActivity = state.activities.find(a => a.startDate === editingDate);
-      
-      if (existingActivity) {
-        handleUpdateActivity({
-          ...existingActivity,
-          title: modalActivityTitle,
-          program: modalActivityProgram,
-          startDate,
-          endDate,
-          categoryId: currentDayStyle?.categoryId,
-          color: cat?.color || existingActivity.color
-        });
-      } else {
-        handleAddActivity({
-          id: Math.random().toString(36).substr(2, 9),
-          title: modalActivityTitle,
-          startDate,
-          endDate,
-          program: modalActivityProgram,
-          categoryId: currentDayStyle?.categoryId,
-          color: cat?.color || '#3b82f6',
-          status: 'active'
-        });
-      }
+      const cat = state.categories.find(c => c.id === modalActivityCategoryId);
+      const existingIdx = state.activities.findIndex(a => a.startDate === editingDate);
+      const newActivity: ActivityRange = {
+        id: existingIdx > -1 ? state.activities[existingIdx].id : Math.random().toString(36).substr(2, 9),
+        title: modalActivityTitle,
+        description: modalActivityDescription,
+        startDate: modalActivityStartDate,
+        endDate: modalActivityEndDate || modalActivityStartDate,
+        program: modalActivityProgram,
+        categoryId: modalActivityCategoryId,
+        color: cat?.color || '#3b82f6',
+        status: 'active'
+      };
+      if (existingIdx > -1) handleUpdateActivity(newActivity);
+      else handleAddActivity(newActivity);
     }
-
     setEditingDate(null);
     setEditingDayId(null);
-    setModalActivityTitle('');
-    addNotification('Día y actividades actualizados correctamente', 'success');
   };
 
-  const handleHighlightActivities = useCallback((ids: string[]) => {
-    setHighlightedActivityIds(ids);
-    // Auto-clear highlight after 8 seconds
-    setTimeout(() => setHighlightedActivityIds([]), 8000);
-  }, []);
-
   const ICONS_LIBRARY = [
-    { id: 'piano', icon: <Piano size={20} />, emoji: '🎹' },
-    { id: 'violin', icon: <Guitar size={20} />, emoji: '🎻' },
-    { id: 'trumpet', icon: <Volume2 size={20} />, emoji: '🎺' },
-    { id: 'drum', icon: <Drum size={20} />, emoji: '🥁' },
-    { id: 'masks', icon: <Users size={20} />, emoji: '🎭' },
-    { id: 'art', icon: <Award size={20} />, emoji: '🎨' },
-    { id: 'flag', icon: <Flag size={20} />, emoji: '🚩' },
-    { id: 'star', icon: <Star size={20} />, emoji: '⭐' },
-    { id: 'fire', icon: <Sparkles size={20} />, emoji: '🎆' },
-    { id: 'check', icon: <CheckCircle2 size={20} />, emoji: '✅' },
-    { id: 'pin', icon: <MapPin size={20} />, emoji: '📍' },
-    { id: 'bell', icon: <Bell size={20} />, emoji: '🔔' },
-    { id: 'coffee', icon: <Coffee size={20} />, emoji: '☕' },
-    { id: 'food', icon: <Utensils size={20} />, emoji: '🍴' },
-    { id: 'alert', icon: <AlertTriangle size={20} />, emoji: '⚠️' },
-    { id: 'idea', icon: <Lightbulb size={20} />, emoji: '💡' },
+    { id: 'piano', emoji: '🎹' }, { id: 'violin', emoji: '🎻' }, { id: 'trumpet', emoji: '🎺' }, { id: 'drum', emoji: '🥁' },
+    { id: 'masks', emoji: '🎭' }, { id: 'art', emoji: '🎨' }, { id: 'flag', emoji: '🚩' }, { id: 'star', emoji: '⭐' },
+    { id: 'fire', emoji: '🎆' }, { id: 'check', emoji: '✅' }, { id: 'pin', emoji: '📍' }, { id: 'bell', emoji: '🔔' },
+    { id: 'coffee', emoji: '☕' }, { id: 'food', emoji: '🍴' }, { id: 'alert', emoji: '⚠️' }, { id: 'idea', emoji: '💡' },
   ];
 
   return (
-    <div className={`flex h-screen w-screen overflow-hidden font-sans transition-colors duration-300 ${
-      theme === 'dark' 
-        ? 'bg-gray-900 text-gray-100' 
-        : 'bg-[#f3f4f6] text-gray-900'
-    }`}>
-      
-      {/* Sidebar Area */}
-      <div 
-        className={`fixed inset-0 z-40 md:relative md:inset-auto md:flex transition-all duration-500 ease-in-out ${
-          isSidebarCollapsed ? 'md:w-0 overflow-hidden' : 'md:w-[28%] min-w-[320px]'
-        } ${isSidebarOpen ? 'translate-x-0' : '-translate-x-full md:translate-x-0'}`}
-      >
-        <div className="absolute inset-0 bg-black/20 md:hidden" onClick={() => setIsSidebarOpen(false)} />
-        <div className="h-full w-full shadow-2xl">
-          <Sidebar 
-            state={state} 
-            onUpdateConfig={handleUpdateConfig}
-            onAddActivity={handleAddActivity}
-            onUpdateActivity={handleUpdateActivity}
-            onRemoveActivity={handleRemoveActivity}
-            onAddCategory={handleAddCategory}
-            onUpdateCategory={handleUpdateCategory}
-            onRemoveCategory={handleRemoveCategory}
-            selectedMonth={selectedMonth}
-            setSelectedMonth={setSelectedMonth}
-            selectedActivityId={selectedActivityId}
-            onSelectActivity={setSelectedActivityId}
-            onPostponeActivity={handlePostponeActivity}
-            onSuspendActivity={handleSuspendActivity}
-            onReactivateActivity={handleReactivateActivity}
-            onHighlightActivities={handleHighlightActivities}
-          />
-        </div>
+    <div className={`flex h-screen w-screen overflow-hidden transition-colors duration-300 ${theme === 'dark' ? 'bg-gray-900 text-gray-100' : 'bg-[#f3f4f6] text-gray-900'}`}>
+      <div className={`fixed inset-0 z-40 md:relative md:inset-auto md:flex transition-all duration-500 ${isSidebarCollapsed ? 'md:w-0 overflow-hidden' : 'md:w-[25%] lg:w-[20%] min-w-[300px]'} ${isSidebarOpen ? 'translate-x-0' : '-translate-x-full md:translate-x-0'}`}>
+        <div className="absolute inset-0 bg-black/40 md:hidden" onClick={() => setIsSidebarOpen(false)} />
+        <Sidebar 
+          state={state} 
+          onUpdateConfig={handleUpdateConfig} 
+          onAddActivity={handleAddActivity} 
+          onUpdateActivity={handleUpdateActivity}
+          onRemoveActivity={handleRemoveActivity} 
+          onAddCategory={(c) => setState(p => ({...p, categories: [...p.categories, c]}))} 
+          onUpdateCategory={(c) => setState(p => ({...p, categories: p.categories.map(oc => oc.id === c.id ? c : oc)}))}
+          onRemoveCategory={(id) => setState(p => ({...p, categories: p.categories.filter(oc => oc.id !== id)}))} 
+          selectedMonth={selectedMonth} 
+          setSelectedMonth={setSelectedMonth}
+          selectedActivityId={selectedActivityId} 
+          onSelectActivity={setSelectedActivityId} 
+          onHighlightActivities={(ids) => setHighlightedActivityIds(ids)}
+          setState={setState}
+          onEditDay={handleSelectDay}
+        />
       </div>
 
-      {/* Main App */}
-      <div className={`flex-1 flex flex-col transition-all duration-500 relative`}>
-        <div className={`border-b h-16 flex items-center justify-between px-8 shrink-0 relative z-10 transition-colors duration-300 ${
-          theme === 'dark' 
-            ? 'bg-gray-800 border-gray-700' 
-            : 'bg-white border-gray-50'
-        }`}>
-           <div className="flex items-center gap-4">
-              <button 
-                onClick={() => setIsSidebarCollapsed(!isSidebarCollapsed)} 
-                className={`hidden md:flex p-2 rounded-full transition-all ${
-                  theme === 'dark' ? 'hover:bg-gray-700 text-indigo-400 bg-gray-700/50' : 'hover:bg-gray-100 text-indigo-600 bg-indigo-50'
-                }`}
-                title={isSidebarCollapsed ? "Mostrar menú" : "Ocultar menú"}
-              >
-                {isSidebarCollapsed ? <ChevronRight size={20} /> : <ChevronLeft size={20} />}
+      <div className="flex-1 flex flex-col transition-all duration-500 relative bg-gray-100 dark:bg-gray-950">
+        <div className={`border-b h-14 md:h-16 flex items-center justify-between px-4 md:px-8 shrink-0 z-10 ${theme === 'dark' ? 'bg-gray-800 border-gray-700' : 'bg-white border-gray-100'}`}>
+           <div className="flex items-center gap-3 md:gap-4">
+              <button onClick={() => setIsSidebarCollapsed(!isSidebarCollapsed)} className="hidden md:flex p-2 rounded-xl hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors">
+                {isSidebarCollapsed ? <ChevronRight size={18} /> : <ChevronLeft size={18} />}
               </button>
-              <button onClick={() => setIsSidebarOpen(true)} className="md:hidden p-2"><Menu /></button>
-              <h1 className={`text-[13px] font-black uppercase tracking-[0.2em] ${theme === 'dark' ? 'text-gray-100' : 'text-gray-900'}`}>{state.config.institutionName}</h1>
+              <button onClick={() => setIsSidebarOpen(true)} className="md:hidden p-2 text-gray-500 hover:text-indigo-600"><Menu size={20} /></button>
+              <h1 className="text-[12px] md:text-[14px] font-black uppercase tracking-[0.15em] md:tracking-[0.2em] truncate max-w-[150px] md:max-w-none">{state.config.institutionName}</h1>
            </div>
-           
-           <div className="flex items-center gap-3">
-              {/* Theme Toggle Button */}
-              <ThemeToggle size="md" />
-
-              <div className="relative group">
-                <button 
-                  onClick={runAiAnalysis}
-                  onMouseEnter={() => setShowAiHelp(true)}
-                  onMouseLeave={() => setShowAiHelp(false)}
-                  disabled={isAnalyzing}
-                  className="flex items-center gap-2 bg-indigo-600 text-white px-6 py-2.5 rounded-full text-[10px] font-black uppercase tracking-widest hover:bg-indigo-700 hover:shadow-lg hover:shadow-indigo-200 transition-all disabled:opacity-50"
-                >
-                  {isAnalyzing ? <div className="w-3 h-3 border-2 border-white/30 border-t-white animate-spin rounded-full"></div> : <Sparkles size={14} />}
-                  Analizar Agenda
-                </button>
-                {showAiHelp && (
-                  <div className={`absolute top-full mt-2 right-0 w-64 p-4 rounded-2xl shadow-2xl text-[10px] font-bold leading-relaxed z-[100] animate-in fade-in slide-in-from-top-2 duration-200 ${
-                    theme === 'dark' ? 'bg-gray-700 text-gray-100' : 'bg-gray-900 text-white'
-                  }`}>
-                    <p>La IA analiza conflictos de horarios, sobrecarga de ensayos y sugiere mejoras logísticas para tus programas musicales.</p>
-                  </div>
-                )}
-              </div>
-              <button onClick={() => setShowNotificationLog(true)} className={`p-2.5 rounded-full transition-all relative ${
-                theme === 'dark' ? 'text-gray-400 hover:text-indigo-400 hover:bg-gray-700' : 'text-gray-400 hover:text-indigo-600 hover:bg-indigo-50'
-              }`}>
-                 <History size={22} />
-                 {state.notifications.length > 0 && <span className="absolute top-2 right-2 w-2 h-2 bg-red-500 rounded-full border-2 border-white"></span>}
+           <div className="flex items-center gap-2 md:gap-3">
+              <ThemeToggle size="sm" />
+              <button onClick={runAiAnalysis} disabled={isAnalyzing} className="bg-indigo-600 hover:bg-indigo-700 text-white px-4 md:px-6 py-2 rounded-full text-[9px] md:text-[10px] font-black uppercase tracking-widest flex items-center gap-2 shadow-lg shadow-indigo-100 transition-all">
+                {isAnalyzing ? <RotateCcw size={12} className="animate-spin" /> : <Sparkles size={12} />} <span className="hidden xs:inline">Analizar IA</span>
               </button>
            </div>
         </div>
-
-        <div className={`flex-1 p-4 relative overflow-hidden transition-colors duration-300 ${
-          theme === 'dark' ? 'bg-gray-900' : 'bg-gray-100/50'
-        }`}>
+        <div className="flex-1 relative overflow-hidden flex items-center justify-center">
           <CalendarCanvas 
             state={state} 
             selectedMonth={selectedMonth} 
-            onSelectDay={handleSelectDay}
-            selectedActivityId={selectedActivityId}
-            highlightedActivityIds={highlightedActivityIds}
-            onSelectActivity={setSelectedActivityId}
-            onToggleComplete={handleToggleActivityComplete}
-            isSidebarCollapsed={isSidebarCollapsed}
+            onSelectDay={handleSelectDay} 
+            selectedActivityId={selectedActivityId} 
+            highlightedActivityIds={highlightedActivityIds} 
+            onSelectActivity={setSelectedActivityId} 
+            onToggleComplete={(id) => setState(p => ({...p, activities: p.activities.map(a => a.id === id ? {...a, completed: !a.completed} : a)}))} 
+            isSidebarCollapsed={isSidebarCollapsed} 
           />
         </div>
       </div>
 
-      {/* MODAL REDISEÑADO: Personalizar Día y Eventos */}
       {editingDate && (
-        <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-[150] p-4 backdrop-blur-[2px] animate-in fade-in duration-300">
-          <div className={`w-full max-w-xl rounded-[2.5rem] shadow-2xl p-10 relative flex flex-col animate-in zoom-in-95 slide-in-from-bottom-10 duration-500 ${
-            theme === 'dark' ? 'bg-gray-800 text-gray-100' : 'bg-white text-gray-900'
-          }`}>
-            <button 
-              onClick={() => {setEditingDate(null); setEditingDayId(null);}} 
-              className={`absolute top-8 right-8 p-2 rounded-full transition-all ${
-                theme === 'dark' ? 'text-gray-400 hover:text-gray-200 hover:bg-gray-700' : 'text-gray-400 hover:text-gray-900 hover:bg-gray-100'
-              }`}
-            >
-              <X size={24} />
+        <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-[150] p-2 md:p-4 backdrop-blur-md animate-in fade-in duration-300">
+          <div className={`w-full max-w-2xl rounded-[1.5rem] md:rounded-[2.5rem] shadow-2xl p-6 md:p-10 relative flex flex-col max-h-[95vh] overflow-hidden animate-in zoom-in-95 duration-500 ${theme === 'dark' ? 'bg-gray-800 text-gray-100' : 'bg-white text-gray-900'}`}>
+            <button onClick={() => {setEditingDate(null); setEditingDayId(null);}} className="absolute top-4 right-4 md:top-8 md:right-8 p-2 md:p-3 text-gray-400 hover:text-red-500 hover:bg-red-50 rounded-full transition-all">
+              <X size={20} md:size={24} />
             </button>
-            
-            <div className="flex items-center gap-4 mb-8">
-               <div className="p-3 bg-indigo-600 rounded-2xl text-white shadow-xl shadow-indigo-100">
-                  <CalendarClock size={28} />
+            <div className="flex items-center gap-4 mb-4 md:mb-8">
+               <div className="p-2 md:p-3 bg-indigo-600 rounded-xl md:rounded-2xl text-white shadow-xl shadow-indigo-100">
+                  <CalendarClock size={24} md:size={28} />
                </div>
                <div>
-                  <h2 className="text-[26px] font-black tracking-tighter leading-none">Gestión del Día</h2>
-                  <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mt-1">Configurar celda y cronograma</p>
+                  <h2 className="text-[20px] md:text-[26px] font-black tracking-tighter leading-none">Gestión Operativa</h2>
+                  <p className="text-[9px] md:text-[11px] font-bold text-gray-400 uppercase tracking-widest mt-1">{format(new Date(editingDate + 'T00:00:00'), "eeee, d 'de' MMMM", {locale: es})}</p>
                </div>
             </div>
-            
-            <div className="space-y-8 overflow-y-auto pr-4 custom-scrollbar max-h-[65vh]">
-               
-               {/* SECCIÓN 1: EVENTO / ACTIVIDAD */}
-               <div className={`p-6 rounded-[2rem] border space-y-5 ${
-                 theme === 'dark' ? 'bg-indigo-900/10 border-indigo-800/30' : 'bg-indigo-50/30 border-indigo-100/50'
-               }`}>
-                  <div className="flex items-center gap-2 px-1">
-                    <PlusCircle size={14} className="text-indigo-600" />
-                    <span className={`text-[10px] font-black uppercase tracking-widest ${theme === 'dark' ? 'text-indigo-300' : 'text-indigo-900'}`}>Actividad del Cronograma</span>
+            <div className="space-y-4 md:space-y-6 overflow-y-auto pr-2 md:pr-4 custom-scrollbar">
+               <div className="space-y-4 md:space-y-5 p-4 md:p-6 bg-indigo-50/20 dark:bg-indigo-900/10 border rounded-[1.5rem] md:rounded-[2rem]">
+                  <div className="flex items-center gap-2 mb-1">
+                    <AlignLeft size={14} className="text-indigo-600" />
+                    <span className="text-[9px] font-black uppercase text-indigo-900 dark:text-indigo-300">Detalles de la Actividad</span>
                   </div>
-                  
-                  <div className="space-y-3">
-                    <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest block px-1">Título del Evento</label>
-                    <input 
-                      type="text" value={modalActivityTitle}
-                      onChange={(e) => setModalActivityTitle(e.target.value)}
-                      placeholder="Ej: Ensayo General / Concierto Gala"
-                      className={`w-full px-5 py-4 rounded-2xl outline-none focus:ring-2 focus:ring-indigo-500/20 text-sm font-bold shadow-inner ${
-                        theme === 'dark' ? 'bg-gray-700 border-gray-600 text-white placeholder-gray-500' : 'bg-white border-indigo-100 text-gray-900'
-                      }`}
-                    />
+                  <div className="space-y-1.5">
+                    <label className="text-[9px] font-black text-gray-400 uppercase ml-1">Título del Evento</label>
+                    <input type="text" value={modalActivityTitle} onChange={e => setModalActivityTitle(e.target.value)} placeholder="Ej: Ensayo General..." className="w-full p-3 rounded-xl border text-sm font-bold dark:bg-gray-700" />
                   </div>
-
-                  <div className="space-y-3">
-                    <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest block px-1">Programa Musical</label>
-                    <div className="grid grid-cols-2 gap-2">
-                       {['Orquesta', 'Coro', 'Coro Infantil', 'Coro Juvenil', 'General'].map(p => (
-                         <button
-                           key={p}
-                           onClick={() => setModalActivityProgram(p as ProgramType)}
-                           className={`py-3 px-4 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all border ${
-                             modalActivityProgram === p 
-                             ? 'bg-indigo-600 text-white border-indigo-600 shadow-lg' 
-                             : theme === 'dark' 
-                               ? 'bg-gray-700 text-gray-400 border-gray-600 hover:border-indigo-800'
-                               : 'bg-white text-gray-400 border-gray-100 hover:border-indigo-200'
-                           }`}
-                         >
-                           {p}
-                         </button>
-                       ))}
-                    </div>
+                  <div className="grid grid-cols-2 gap-3">
+                     <div className="space-y-1.5">
+                        <label className="text-[9px] font-black text-gray-400 uppercase ml-1">Desde</label>
+                        <input type="date" value={modalActivityStartDate} onChange={e => setModalActivityStartDate(e.target.value)} className="w-full p-2.5 rounded-lg border text-xs dark:bg-gray-700" />
+                     </div>
+                     <div className="space-y-1.5">
+                        <label className="text-[9px] font-black text-gray-400 uppercase ml-1">Hasta</label>
+                        <input type="date" value={modalActivityEndDate} onChange={e => setModalActivityEndDate(e.target.value)} className="w-full p-2.5 rounded-lg border text-xs dark:bg-gray-700" />
+                     </div>
                   </div>
-               </div>
-
-               {/* SECCIÓN 2: RANGO DE FECHAS */}
-               <div className="grid grid-cols-2 gap-4">
-                 <div className="space-y-3">
-                   <div className="flex items-center gap-2">
-                      <CalendarIcon size={14} className="text-indigo-400" />
-                      <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest text-xs">Desde</label>
-                   </div>
-                   <input 
-                    type="date" value={currentDayStyle?.startDate || editingDate}
-                    onChange={(e) => updateDayStyle(editingDayId, editingDate!, { startDate: e.target.value })}
-                    className={`w-full px-5 py-4 border rounded-2xl text-[11px] font-bold ${
-                      theme === 'dark' ? 'bg-gray-700 border-gray-600 text-white' : 'bg-gray-50/50 border-gray-100 text-gray-900'
-                    }`}
-                   />
-                 </div>
-                 <div className="space-y-3">
-                   <div className="flex items-center gap-2">
-                      <CalendarIcon size={14} className="text-indigo-400" />
-                      <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest text-xs">Hasta (Opcional)</label>
-                   </div>
-                   <div className="relative">
-                     <input 
-                      type="date" value={currentDayStyle?.endDate || ''}
-                      onChange={(e) => updateDayStyle(editingDayId, editingDate!, { endDate: e.target.value })}
-                      onFocus={handleEndDateFocus}
-                      className={`w-full px-5 py-4 pr-12 border rounded-2xl text-[11px] font-bold ${
-                        theme === 'dark' ? 'bg-gray-700 border-gray-600 text-white' : 'bg-gray-50/50 border-gray-100 text-gray-900'
-                      }`}
-                     />
-                     {currentDayStyle?.endDate && (
-                       <button
-                         type="button"
-                         onClick={() => updateDayStyle(editingDayId, editingDate!, { endDate: '' })}
-                         className="absolute right-3 top-1/2 -translate-y-1/2 p-1.5 text-gray-400 hover:text-red-500 hover:bg-red-50 rounded-lg transition-all"
-                         title="Borrar fecha final"
-                       >
-                         <X size={14} />
-                       </button>
-                     )}
-                   </div>
-                 </div>
-               </div>
-
-               {/* SECCIÓN 3: ESTILO DE CELDA (Anteriormente Personalizar Día) */}
-               <div className="space-y-6 pt-4 border-t border-gray-100">
-                  <div className="flex items-center gap-2 px-1">
-                    <LayoutList size={14} className="text-indigo-400" />
-                    <span className="text-[10px] font-black text-gray-400 uppercase tracking-widest">Apariencia en el Canvas</span>
-                  </div>
-
-                  <div className={`p-5 rounded-[1.5rem] flex items-center justify-between border transition-all cursor-pointer ${
-                    theme === 'dark' ? 'bg-red-900/10 border-red-900/30' : 'bg-red-50/50 border-red-100/50 hover:bg-red-50'
-                  }`} onClick={() => updateDayStyle(editingDayId, editingDate, { isHoliday: !currentDayStyle?.isHoliday })}>
-                    <div className="flex items-center gap-4">
-                      <div className="bg-red-500 p-2.5 rounded-xl shadow-lg shadow-red-100">
-                        <Flag className="text-white" size={18} />
-                      </div>
-                      <span className={`text-[11px] font-black uppercase tracking-widest ${theme === 'dark' ? 'text-red-300' : 'text-red-900'}`}>Día Feriado / No Laborable</span>
-                    </div>
-                    <div className={`w-6 h-6 rounded-lg border-2 transition-all flex items-center justify-center ${currentDayStyle?.isHoliday ? 'bg-red-500 border-red-500' : theme === 'dark' ? 'border-gray-600 bg-gray-700' : 'border-red-200 bg-white'}`}>
-                      {currentDayStyle?.isHoliday && <CheckCircle2 className="text-white" size={14} />}
-                    </div>
-                  </div>
-
-                  <div className="space-y-3">
-                    <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest block px-1">Categoría Visual</label>
-                    <select 
-                        value={currentDayStyle?.categoryId || ''}
-                        onChange={(e) => updateDayStyle(editingDayId, editingDate, { categoryId: e.target.value })}
-                        className={`w-full px-5 py-4 border rounded-2xl outline-none focus:ring-2 focus:ring-indigo-500/20 text-sm font-bold ${
-                          theme === 'dark' ? 'bg-gray-700 border-gray-600 text-white' : 'bg-gray-50/50 border-gray-100 text-gray-900'
-                        }`}
-                    >
-                      <option value="">Ninguna categoría</option>
-                      {state.categories.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+                  <div className="space-y-1.5">
+                    <label className="text-[9px] font-black text-gray-400 uppercase ml-1">Categoría</label>
+                    <select value={modalActivityCategoryId} onChange={e => setModalActivityCategoryId(e.target.value)} className="w-full p-2.5 rounded-lg border text-xs dark:bg-gray-700">
+                        <option value="">Sin categoría</option>
+                        {state.categories.map(cat => <option key={cat.id} value={cat.id}>{cat.name}</option>)}
                     </select>
                   </div>
-
-                  <div className="space-y-4">
-                      <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest block px-1">Biblioteca de Iconos</label>
-                      <div className={`grid grid-cols-8 gap-3 p-6 rounded-[2rem] border ${
-                        theme === 'dark' ? 'bg-gray-700 border-gray-600' : 'bg-gray-50/50 border-gray-100'
-                      }`}>
-                        {ICONS_LIBRARY.map(item => (
-                          <button 
-                            key={item.id}
-                            onClick={() => updateDayStyle(editingDayId, editingDate, { icon: item.emoji })}
-                            className={`aspect-square flex flex-col items-center justify-center rounded-2xl transition-all ${
-                              currentDayStyle?.icon === item.emoji 
-                              ? 'bg-white shadow-xl shadow-indigo-100/50 border border-indigo-100 scale-110 ring-2 ring-indigo-50' 
-                              : theme === 'dark' ? 'hover:bg-gray-600 opacity-60 hover:opacity-100' : 'hover:bg-white hover:shadow-md hover:scale-105 opacity-60 hover:opacity-100'
-                            }`}
-                            title={item.id}
-                          >
-                            <span className="text-xl">{item.emoji}</span>
-                          </button>
+                  <div className="space-y-1.5">
+                    <label className="text-[9px] font-black text-gray-400 uppercase ml-1">Notas</label>
+                    <textarea value={modalActivityDescription} onChange={e => setModalActivityDescription(e.target.value)} placeholder="Detalles logísticos..." className="w-full p-3 rounded-xl border text-sm dark:bg-gray-700 h-20 md:h-24 resize-none" />
+                  </div>
+               </div>
+               <div className="p-4 md:p-6 bg-gray-50 dark:bg-gray-700/50 rounded-[1.5rem] md:rounded-[2rem] border">
+                  <div className="flex flex-col md:flex-row gap-4 mb-4 md:mb-6">
+                     <button onClick={() => updateDayStyle(editingDayId, editingDate!, {isHoliday: !state.dayStyles.find(s=>s.id===editingDayId)?.isHoliday})} className={`flex-1 flex items-center justify-center gap-3 py-3 md:py-4 px-4 md:px-6 rounded-xl md:rounded-2xl border transition-all font-black text-[9px] md:text-[10px] uppercase ${state.dayStyles.find(s=>s.id===editingDayId)?.isHoliday ? 'bg-red-500 text-white' : 'bg-white text-red-500'}`}><Flag size={14} /> Feriado</button>
+                     <div className="flex-1 flex items-center gap-2">
+                        {['square', 'circle'].map((shape) => (
+                          <button key={shape} onClick={() => updateDayStyle(editingDayId, editingDate!, {shape: shape as any})} className={`flex-1 py-3 md:py-4 border rounded-xl md:rounded-2xl transition-all flex flex-col items-center gap-1 ${state.dayStyles.find(s=>s.id===editingDayId)?.shape === shape ? 'bg-indigo-600 text-white' : 'bg-white text-gray-400'}`}>{shape === 'circle' ? <Circle size={12} md:size={14} /> : <LayoutList size={12} md:size={14} />}<span className="text-[7px] md:text-[8px] font-black uppercase">{shape === 'circle' ? 'Círculo' : 'Cuadro'}</span></button>
                         ))}
-                      </div>
+                     </div>
+                  </div>
+                  <div className="grid grid-cols-4 sm:grid-cols-8 gap-2 md:gap-3">
+                    {ICONS_LIBRARY.map(item => (
+                      <button key={item.id} onClick={() => updateDayStyle(editingDayId, editingDate!, { icon: item.emoji })} className={`text-lg md:text-xl p-2 md:p-3 rounded-xl md:rounded-2xl transition-all border border-transparent ${state.dayStyles.find(s=>s.id===editingDayId)?.icon === item.emoji ? 'bg-indigo-100 border-indigo-200 scale-110' : 'hover:bg-white active:bg-indigo-50'}`}>{item.emoji}</button>
+                    ))}
                   </div>
                </div>
             </div>
-            
-            <button 
-              onClick={handleModalConfirm}
-              className="mt-10 bg-indigo-600 text-white py-5 rounded-[1.5rem] font-black uppercase tracking-[0.2em] text-[12px] shadow-2xl shadow-indigo-200 hover:bg-indigo-700 hover:-translate-y-1 transition-all active:scale-95 flex items-center justify-center gap-3"
-            >
-              <Check size={18} /> Confirmar Todo el Día
-            </button>
+            <button onClick={handleModalConfirm} className="mt-4 md:mt-8 bg-indigo-600 text-white py-4 md:py-5 rounded-xl md:rounded-[1.8rem] font-black uppercase text-[11px] md:text-[12px] tracking-[0.1em] md:tracking-[0.2em] shadow-2xl active:scale-95 transition-all"><Check size={18} md:size={20} className="inline mr-2" /> Guardar Cambios</button>
           </div>
         </div>
       )}
-
-      <style>{`
-        .custom-scrollbar::-webkit-scrollbar { width: 5px; }
-        .custom-scrollbar::-webkit-scrollbar-thumb { background: #e2e8f0; border-radius: 10px; }
-        .custom-scrollbar::-webkit-scrollbar-track { background: transparent; }
-      `}</style>
     </div>
   );
 };

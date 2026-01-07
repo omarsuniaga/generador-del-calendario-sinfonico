@@ -1,4 +1,3 @@
-
 export type ProgramType = 'Orquesta' | 'Coro' | 'Coro Infantil' | 'Coro Juvenil' | 'General';
 export type ActivityStatus = 'active' | 'postponed' | 'suspended';
 
@@ -19,6 +18,7 @@ export interface ActivityRange {
   description?: string;
   status?: ActivityStatus;
   rescheduledToId?: string; 
+  originalActivityId?: string; // Reference to the original activity if it was rescheduled
   completed?: boolean;  // Track if the activity has been completed
 }
 

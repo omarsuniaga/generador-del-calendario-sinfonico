@@ -1,78 +1,67 @@
 
-# 🎵 Sinfonía Calendar Core: Documentación del Sistema
+# 🎵 Sinfonía Calendar Core: Manual de Operaciones v1.5
 
 ## 1. Visión General
-**Sinfonía Calendar Core** es una plataforma de ingeniería frontend de alto rendimiento diseñada para la planificación estratégica de instituciones musicales (Orquestas, Coros y Conservatorios). El sistema combina un motor de renderizado de alta fidelidad con inteligencia artificial generativa para transformar la logística compleja en cronogramas visuales elegantes y planes operativos formales.
+**Sinfonía Calendar Core** es una herramienta de planificación de grado profesional diseñada para instituciones musicales. Combina un motor visual de alta fidelidad con Inteligencia Artificial (Gemini API) para transformar la gestión académica en una experiencia estética y eficiente.
 
 ---
 
-## 2. Guía Detallada del Menú Lateral (Sidebar)
+## 2. Capacidades del Menú de Herramientas
 
-El menú lateral es el centro de control operativo del sistema. A continuación se detallan las funciones de cada sección:
+### ➕ Crear Eventos (Gestión de Eventos)
+El punto de entrada principal para la planificación manual. 
+- **Atributos:** Permite definir el Título, Fecha de Inicio, Fecha de Fin, Categoría (Color) y una Descripción técnica.
+- **Validación:** El sistema asegura que las fechas sean coherentes y las integra automáticamente en las líneas de tiempo del canvas.
 
-### 📥 Crear Eventos
-*   **Función:** Permite la entrada manual de actividades individuales.
-*   **Capacidades:**
-    *   **Título y Rango:** Definición del nombre del evento y sus fechas de inicio/fin.
-    *   **Varita Mágica (Magic Fill):** Un botón integrado con IA que autocompleta fechas y programas analizando solo el título ingresado.
-    *   **Asignación de Categoría:** Vinculación inmediata a los perfiles de color definidos.
+### 🏷️ Categorías (Gestión de Categorías)
+Define el lenguaje visual de tu institución.
+- **Identidad Cromática:** Crea etiquetas personalizadas (ej: "Gira Internacional", "Audiciones", "Mantenimiento") y asígnale un color único.
+- **Impacto:** Todas las líneas de tiempo y decoraciones del calendario heredan los colores definidos aquí.
 
-### 🏷️ Categorías
-*   **Función:** Gestión del sistema de codificación por colores de la institución.
-*   **Capacidades:**
-    *   **Personalización:** Creación, edición y eliminación de etiquetas (ej: "Conciertos", "Feriados", "Ensayos").
-    *   **Selector Hexadecimal:** Control total sobre la paleta cromática para coherencia con la identidad visual institucional.
+### 📋 Actividades (Lista de Eventos)
+Un centro de control para la edición rápida del mes actual.
+- **Listado Dinámico:** Muestra todos los eventos que ocurren en el mes seleccionado.
+- **Edición en un Clic:** El botón de edición abre el panel de gestión avanzada del día, permitiendo cambiar iconos, formas y detalles logísticos.
+- **Eliminación:** Limpieza rápida de la agenda con confirmación visual.
 
-### 📋 Actividades
-*   **Función:** Listado dinámico y filtrado de los eventos registrados para el mes seleccionado.
-*   **Capacidades:**
-    *   **Gestión de Ciclo de Vida:** Acceso rápido para **Posponer** (reprogramar manteniendo el historial), **Suspender** (marcar como inactivo visualmente) o **Eliminar**.
-    *   **Focus Mode:** Al hacer clic, la actividad se resalta tanto en el listado como en el Canvas principal.
+### 📅 Mes de Trabajo (Navegación Temporal)
+Controla la ventana temporal del sistema.
+- **Selector Rápido:** Cambia entre los 12 meses del año para planificar temporadas completas.
+- **Actualización en Tiempo Real:** Al cambiar de mes, el canvas y el listado de actividades se sincronizan instantáneamente.
 
-### 📅 Mes de Trabajo
-*   **Función:** Selector rápido de navegación temporal.
-*   **Capacidades:** Permite saltar entre los 12 meses del año de gestión actual para visualizar y editar cronogramas específicos de forma instantánea.
+### ✨ Inteligencia Artificial (Creación asistida)
+El módulo más avanzado del sistema para agilizar la carga de datos.
+- **Prompting Natural:** Puedes escribir frases como *"Tengo un ensayo de orquesta el 15 de julio y un concierto de gala el día 20"*.
+- **Flujo de Confirmación:** **Crítico.** La IA no escribe directamente en la base de datos. Genera una propuesta que el usuario debe validar (Confirmar o Descartar) para asegurar la precisión de los datos interpretados.
 
-### ✨ Inteligencia Artificial
-*   **Función:** Procesamiento de lenguaje natural masivo (NLP).
-*   **Capacidades:** Área de texto donde el usuario puede escribir párrafos complejos (ej: "Agrega ensayos de coro todos los martes de marzo y un concierto el día 30"). La IA parsea el texto y crea múltiples entradas automáticamente.
-
-### 🔔 Notificaciones IA
-*   **Función:** Feed de retroalimentación del asistente inteligente.
-*   **Capacidades:** Muestra advertencias logísticas, sugerencias de optimización de tiempos y alertas de conflictos de horarios detectadas tras el análisis de la agenda.
-
-### 📤 Importar Eventos
-*   **Función:** Migración de datos externos al sistema.
-*   **Capacidades:**
-    *   **Modo Texto (CSV):** Pegado directo de registros separados por comas.
-    *   **Modo Archivo:** Carga de archivos `.csv` o `.txt` con detección automática de cabeceras (Títulos, Fechas, Programas).
+### 📥 Importar
+- **Compatibilidad:** Soporta archivos `.json` (backups completos) y `.csv` (datos de tablas).
+- **Flexibilidad:** Detecta automáticamente el formato y ofrece una vista previa antes de fusionar los datos con la sesión actual.
 
 ### 🚀 Exportar
-*   **Función:** Generación de entregables profesionales.
-*   **Capacidades:**
-    *   **Plan Operativo (DOCX):** La IA redacta un documento formal en Word con objetivos y justificación académica basada en tus eventos.
-    *   **PNG / PDF:** Capturas de alta resolución del calendario visual para impresión o envío por WhatsApp/Correo.
+- **Backup JSON:** Descarga toda la configuración (logo, categorías, eventos) para moverla a otro dispositivo.
+- **Spreadsheet CSV:** Genera una hoja de cálculo con todos los eventos para análisis externo.
 
-### ⚙️ Ajustes Institucionales
-*   **Función:** Configuración de la identidad de marca del calendario.
-*   **Capacidades:** Cambio del nombre de la institución (que actualiza todos los encabezados y documentos) y carga del logotipo oficial.
+### 🏛️ Ajuste Institucional
+- **Personalización:** Cambia el nombre de la institución y sube el logotipo oficial.
+- **Impacto Visual:** Estos datos se renderizan en el encabezado del canvas principal, asegurando que cada exportación mantenga el branding oficial.
 
 ---
 
-## 3. Capacidades de Inteligencia Artificial (Gemini API)
-
-El sistema integra modelos **Gemini 3 (Flash y Pro)** para flujos de trabajo críticos:
-
-1.  **Auto-Programación:** Conversión de lenguaje natural en objetos de datos estructurados.
-2.  **Análisis de Conflictos:** Escaneo de base de datos buscando sobrecargas de músicos o espacios.
-3.  **Generación de POI:** Redacción de planes operativos institucionales formales.
+## 3. El Motor Visual (Canvas)
+El calendario no es una simple cuadrícula; es un lienzo interactivo:
+- **Líneas de Tiempo:** Conectan los días de inicio y fin con el color de la categoría, facilitando la lectura de la duración de proyectos.
+- **Decoración de Celdas:** Permite encerrar días en **Círculos** o **Cuadros** con transparencia, ideal para resaltar hitos.
+- **Iconografía Musical:** Biblioteca integrada de iconos (🎹, 🎻, 🎺) para identificar el tipo de actividad de un vistazo.
+- **Días Feriados:** Marcador especial de "Día Feriado" que aplica un diseño distintivo (Bandera/Color Rojo) para alertar sobre la inactividad operativa.
 
 ---
 
-## 4. Especificaciones Técnicas
+## 4. Auditoría Logística (Analizar IA)
+En la parte superior, el botón "Analizar IA" utiliza Gemini 3 Pro para auditar todo el calendario en busca de:
+- **Conflictos de Horario:** Ensayos solapados en el mismo programa.
+- **Inconsistencias:** Días de concierto sin ensayos previos recomendados.
+- **Alertas Logísticas:** Notificaciones sobre la carga de trabajo institucional.
 
-*   **Lienzo (Canvas):** 1280x720px con soporte para Zoom y Panning.
-*   **Persistencia:** Guardado automático en el navegador.
-*   **Exportación:** Alta fidelidad (2x Pixel Ratio) para evitar pixelación en impresiones grandes.
-
-*Desarrollado para la excelencia en la gestión musical académica.*
+---
+*Desarrollado para la excelencia en la gestión musical y operativa.*
