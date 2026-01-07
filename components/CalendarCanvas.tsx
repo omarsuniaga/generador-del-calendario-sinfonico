@@ -46,6 +46,11 @@ export const CalendarCanvas: React.FC<CalendarCanvasProps> = ({ state, selectedM
     end: monthEnd
   }, { locale: es });
 
+  // Clear stale viewport data to ensure fresh centering on every page load
+  useEffect(() => {
+    localStorage.removeItem(UI_STATE_KEY);
+  }, []);
+
   // Function to center and fit canvas within viewport
   const fitCanvasToViewport = useCallback(() => {
     const container = containerRef.current;
@@ -100,7 +105,7 @@ export const CalendarCanvas: React.FC<CalendarCanvasProps> = ({ state, selectedM
     // Final backup for CSS transitions
     const timerId = setTimeout(() => {
       fitCanvasToViewport();
-    }, 100);
+    }, 150); // Increased from 100ms to 150ms for safety against layout shifts
 
     return () => {
       cancelAnimationFrame(rafId);
@@ -120,18 +125,6 @@ export const CalendarCanvas: React.FC<CalendarCanvasProps> = ({ state, selectedM
       localStorage.setItem(UI_STATE_KEY, JSON.stringify(viewport));
     }
   }, [viewport, hasUserInteracted]);
-
-  // Try to load saved preference only if it exists AND we haven't centered yet
-  // But strictly rely on the fresh calculation for the very first frame
-  useEffect(() => {
-    const saved = localStorage.getItem(UI_STATE_KEY);
-    if (saved) {
-      const parsed = JSON.parse(saved);
-      // We check if the saved values are significantly different to avoid overwrite jitter
-      setViewport(parsed);
-      setHasUserInteracted(true);
-    }
-  }, []);
 
   const monthActivities = useMemo(() => {
     return state.activities.filter(a => {
