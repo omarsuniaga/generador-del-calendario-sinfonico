@@ -1,3 +1,4 @@
+
 import React, { useState, useRef, useEffect } from 'react';
 import { CalendarState, ActivityRange, ProgramType, Category, NotificationLog } from '../types';
 import { format, endOfMonth, addDays, isValid } from 'date-fns';
@@ -42,6 +43,7 @@ import { parseNaturalLanguageActivity, getMusicalSuggestions, generateInstitutio
 import { toPng } from 'html-to-image';
 import { jsPDF } from 'jspdf';
 import { Document, Packer, Paragraph, TextRun, HeadingLevel, Table, TableRow, TableCell, WidthType, AlignmentType, BorderStyle } from 'docx';
+import { useTheme } from '../contexts/ThemeContext';
 
 interface SidebarProps {
   state: CalendarState;
@@ -107,6 +109,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
   selectedActivityId,
   onSelectActivity
 }) => {
+  const { theme } = useTheme();
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [aiInput, setAiInput] = useState('');
   const [csvTextInput, setCsvTextInput] = useState('');
@@ -415,13 +418,15 @@ export const Sidebar: React.FC<SidebarProps> = ({
   const SectionHeader = ({ id, icon: Icon, title, count }: { id: string, icon: any, title: string, count?: number }) => (
     <button 
       onClick={() => toggleSection(id)}
-      className="w-full flex items-center justify-between py-3 px-3 hover:bg-indigo-50/50 rounded-xl transition-all group"
+      className={`w-full flex items-center justify-between py-3 px-3 rounded-xl transition-all group ${
+        theme === 'dark' ? 'hover:bg-gray-700' : 'hover:bg-indigo-50/50'
+      }`}
     >
       <div className="flex items-center gap-3">
-        <div className={`p-2 rounded-lg transition-colors ${openSections[id] ? 'bg-indigo-100 text-indigo-600' : 'bg-gray-50 text-gray-400 group-hover:bg-gray-100'}`}>
+        <div className={`p-2 rounded-lg transition-colors ${openSections[id] ? (theme === 'dark' ? 'bg-indigo-900/40 text-indigo-400' : 'bg-indigo-100 text-indigo-600') : (theme === 'dark' ? 'bg-gray-700 text-gray-400 group-hover:bg-gray-600' : 'bg-gray-50 text-gray-400 group-hover:bg-gray-100')}`}>
           <Icon size={16} />
         </div>
-        <span className={`text-[11px] font-black uppercase tracking-widest ${openSections[id] ? 'text-gray-900' : 'text-gray-50'}`}>
+        <span className={`text-[11px] font-black uppercase tracking-widest ${openSections[id] ? (theme === 'dark' ? 'text-gray-100' : 'text-gray-900') : (theme === 'dark' ? 'text-gray-400' : 'text-gray-500')}`}>
           {title} {count !== undefined && <span className="ml-1 opacity-40">[{count}]</span>}
         </span>
       </div>
@@ -432,27 +437,35 @@ export const Sidebar: React.FC<SidebarProps> = ({
   const aiNotifications = state.notifications.filter(n => n.type === 'ai');
 
   return (
-    <div className="h-full bg-white border-r border-gray-100 flex flex-col overflow-y-auto select-none custom-scrollbar">
-      <div className="p-6 sticky top-0 bg-white/95 backdrop-blur-sm z-20 border-b border-gray-50 flex items-center gap-3">
+    <div className={`h-full border-r flex flex-col overflow-y-auto select-none custom-scrollbar transition-colors duration-300 ${
+      theme === 'dark' ? 'bg-gray-800 border-gray-700' : 'bg-white border-gray-100'
+    }`}>
+      <div className={`p-6 sticky top-0 backdrop-blur-sm z-20 border-b flex items-center gap-3 ${
+        theme === 'dark' ? 'bg-gray-800/95 border-gray-700' : 'bg-white/95 border-gray-50'
+      }`}>
         <div className="w-10 h-10 bg-indigo-600 rounded-2xl flex items-center justify-center text-white shadow-lg shadow-indigo-100">
           <Music size={20} />
         </div>
         <div>
-          <h2 className="text-sm font-black tracking-tighter uppercase text-gray-900 leading-none">Sinfonía</h2>
+          <h2 className={`text-sm font-black tracking-tighter uppercase leading-none ${theme === 'dark' ? 'text-gray-100' : 'text-gray-900'}`}>Sinfonía</h2>
           <span className="text-[9px] font-bold text-gray-400 uppercase tracking-widest">Calendar Core</span>
         </div>
       </div>
 
       <div className="p-4 space-y-2">
         {/* 1. CREAR EVENTOS */}
-        <div className="border-b border-gray-50 pb-2">
+        <div className={`border-b pb-2 ${theme === 'dark' ? 'border-gray-700' : 'border-gray-50'}`}>
           <SectionHeader id="manual" icon={Plus} title="Crear Eventos" />
           {openSections.manual && (
             <div className="p-3 space-y-3 animate-in fade-in slide-in-from-top-1 duration-200">
               <div className="relative">
                 <input 
                   type="text" placeholder="Título de la actividad"
-                  className={`w-full px-3 py-2.5 pr-10 border rounded-xl text-[11px] outline-none transition-all focus:ring-2 focus:ring-indigo-500/20 font-medium ${smartSuggestion ? 'border-indigo-200 bg-indigo-50/10' : 'border-gray-100 bg-gray-50/30'}`}
+                  className={`w-full px-3 py-2.5 pr-10 border rounded-xl text-[11px] outline-none transition-all focus:ring-2 focus:ring-indigo-500/20 font-medium ${
+                    theme === 'dark'
+                      ? 'bg-gray-700 border-gray-600 text-gray-100 placeholder-gray-400'
+                      : 'bg-gray-50/30 border-gray-100 text-gray-900'
+                  } ${smartSuggestion ? 'border-indigo-500/50 ring-2 ring-indigo-500/10' : ''}`}
                   value={manualTitle} onChange={e => setManualTitle(e.target.value)}
                 />
                 <button 
@@ -465,7 +478,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
 
               {/* SMART CATEGORY SUGGESTION UI */}
               {isSuggesting && (
-                <div className="flex items-center gap-2 px-2 py-1 bg-gray-50 rounded-lg animate-pulse">
+                <div className={`flex items-center gap-2 px-2 py-1 rounded-lg animate-pulse ${theme === 'dark' ? 'bg-gray-700' : 'bg-gray-50'}`}>
                    <Zap size={10} className="text-indigo-400" />
                    <span className="text-[9px] text-gray-400 font-bold uppercase tracking-widest">IA analizando...</span>
                 </div>
@@ -501,12 +514,14 @@ export const Sidebar: React.FC<SidebarProps> = ({
               )}
 
               <div className="grid grid-cols-2 gap-3">
-                <input type="date" className="w-full text-[10px] border border-gray-100 rounded-xl p-2 bg-gray-50/30" value={manualStart} onChange={e => setManualStart(e.target.value)} />
-                <input type="date" className="w-full text-[10px] border border-gray-100 rounded-xl p-2 bg-gray-50/30" value={manualEnd} onChange={e => setManualEnd(e.target.value)} />
+                <input type="date" className={`w-full text-[10px] border rounded-xl p-2 ${theme === 'dark' ? 'bg-gray-700 border-gray-600 text-white' : 'bg-gray-50/30 border-gray-100 text-gray-900'}`} value={manualStart} onChange={e => setManualStart(e.target.value)} />
+                <input type="date" className={`w-full text-[10px] border rounded-xl p-2 ${theme === 'dark' ? 'bg-gray-700 border-gray-600 text-white' : 'bg-gray-50/30 border-gray-100 text-gray-900'}`} value={manualEnd} onChange={e => setManualEnd(e.target.value)} />
               </div>
               <div className="relative">
                 <select 
-                  className={`w-full text-[10px] border rounded-xl p-2.5 font-medium transition-all ${smartSuggestion ? 'border-indigo-400 ring-4 ring-indigo-50' : 'border-gray-100 bg-gray-50/30'}`}
+                  className={`w-full text-[10px] border rounded-xl p-2.5 font-medium transition-all ${
+                    theme === 'dark' ? 'bg-gray-700 border-gray-600 text-white' : 'bg-gray-50/30 border-gray-100 text-gray-900'
+                  } ${smartSuggestion ? 'border-indigo-500/50 ring-2 ring-indigo-500/10' : ''}`}
                   value={manualCat} onChange={e => setManualCat(e.target.value)}
                 >
                   <option value="">Seleccionar Categoría</option>
@@ -514,7 +529,9 @@ export const Sidebar: React.FC<SidebarProps> = ({
                 </select>
                 {smartSuggestion && <div className="absolute -top-2 -right-1 w-3 h-3 bg-indigo-500 rounded-full animate-ping"></div>}
               </div>
-              <button onClick={handleManualAction} className="w-full bg-gray-900 text-white text-[10px] font-black py-3 rounded-xl uppercase tracking-widest hover:bg-black transition-all shadow-lg shadow-gray-100">
+              <button onClick={handleManualAction} className={`w-full text-[10px] font-black py-3 rounded-xl uppercase tracking-widest transition-all shadow-lg ${
+                theme === 'dark' ? 'bg-indigo-600 text-white hover:bg-indigo-700 shadow-indigo-900/20' : 'bg-gray-900 text-white hover:bg-black shadow-gray-100'
+              }`}>
                 Añadir al Calendario
               </button>
             </div>
@@ -522,16 +539,16 @@ export const Sidebar: React.FC<SidebarProps> = ({
         </div>
 
         {/* 2. CATEGORIAS */}
-        <div className="border-b border-gray-50 pb-2">
+        <div className={`border-b pb-2 ${theme === 'dark' ? 'border-gray-700' : 'border-gray-50'}`}>
           <SectionHeader id="categories" icon={Tag} title="Categorías" count={state.categories.length} />
           {openSections.categories && (
             <div className="p-3 space-y-3 animate-in fade-in slide-in-from-top-1 duration-200">
               <div className="space-y-1.5 max-h-40 overflow-y-auto pr-1 custom-scrollbar">
                 {state.categories.map(cat => (
-                  <div key={cat.id} className="flex items-center justify-between p-2 bg-gray-50/50 rounded-lg border border-transparent hover:border-indigo-100 transition-all group">
+                  <div key={cat.id} className={`flex items-center justify-between p-2 rounded-lg border border-transparent transition-all group ${theme === 'dark' ? 'bg-gray-700/50 hover:border-gray-600' : 'bg-gray-50/50 hover:border-indigo-100'}`}>
                     <div className="flex items-center gap-2 overflow-hidden">
                       <div className="w-2.5 h-2.5 rounded-full flex-shrink-0" style={{ backgroundColor: cat.color }}></div>
-                      <span className="text-[10px] font-bold text-gray-700 truncate">{cat.name}</span>
+                      <span className={`text-[10px] font-bold truncate ${theme === 'dark' ? 'text-gray-300' : 'text-gray-700'}`}>{cat.name}</span>
                     </div>
                     <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100">
                       <button onClick={() => startEditCategory(cat)} className="text-indigo-400 hover:text-indigo-600 p-1"><Edit2 size={12} /></button>
@@ -544,7 +561,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
                 <input 
                   type="text" placeholder="Nueva..." value={newCatName}
                   onChange={e => setNewCatName(e.target.value)}
-                  className="flex-1 px-3 py-2 text-[10px] border border-gray-100 rounded-xl bg-gray-50/30"
+                  className={`flex-1 px-3 py-2 text-[10px] border rounded-xl ${theme === 'dark' ? 'bg-gray-700 border-gray-600 text-white' : 'bg-gray-50/30 border-gray-100 text-gray-900'}`}
                 />
                 <input type="color" className="w-8 h-8 p-0 rounded-lg cursor-pointer border-none bg-transparent" value={newCatColor} onChange={e => setNewCatColor(e.target.value)} />
                 <button onClick={handleCreateOrUpdateCategory} className="p-2 bg-indigo-600 text-white rounded-xl hover:bg-indigo-700"><Plus size={16} /></button>
@@ -554,7 +571,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
         </div>
 
         {/* 3. ACTIVIDADES */}
-        <div className="border-b border-gray-50 pb-2">
+        <div className={`border-b pb-2 ${theme === 'dark' ? 'border-gray-700' : 'border-gray-50'}`}>
           <SectionHeader id="activities" icon={Layers} title="Actividades" count={state.activities.filter(a => parseSafeDate(a.startDate).getMonth() === selectedMonth).length} />
           {openSections.activities && (
             <div className="p-3 space-y-2 animate-in fade-in slide-in-from-top-1 duration-200 pb-20">
@@ -565,17 +582,25 @@ export const Sidebar: React.FC<SidebarProps> = ({
                     const cat = state.categories.find(c => c.id === a.categoryId);
                     const isSelected = selectedActivityId === a.id;
                     return (
-                      <div key={a.id} onClick={() => onSelectActivity(isSelected ? null : a.id)} className={`p-3 bg-white rounded-xl border cursor-pointer transition-all ${isSelected ? 'border-indigo-600 shadow-md ring-2 ring-indigo-50/10' : 'border-gray-100 hover:border-indigo-200 shadow-sm'} ${a.status !== 'active' ? 'opacity-50' : ''}`}>
+                      <div key={a.id} onClick={() => onSelectActivity(isSelected ? null : a.id)} className={`p-3 rounded-xl border cursor-pointer transition-all ${
+                        isSelected 
+                          ? (theme === 'dark' ? 'bg-gray-700 border-indigo-500 shadow-lg shadow-indigo-900/10' : 'bg-white border-indigo-600 shadow-md ring-2 ring-indigo-50/10') 
+                          : (theme === 'dark' ? 'bg-gray-700/30 border-gray-700 hover:border-gray-600 shadow-sm' : 'bg-white border-gray-100 hover:border-indigo-200 shadow-sm')
+                        } ${a.status !== 'active' ? 'opacity-50' : ''}`}>
                         <div className="flex items-center gap-2 mb-1">
                           <div className="w-2 h-2 rounded-full" style={{ backgroundColor: cat?.color || a.color }}></div>
-                          <span className={`text-[10px] font-black truncate flex-1 ${isSelected ? 'text-indigo-900' : 'text-gray-800'} ${a.status === 'postponed' ? 'line-through' : ''}`}>{a.title}</span>
+                          <span className={`text-[10px] font-black truncate flex-1 ${
+                            isSelected ? (theme === 'dark' ? 'text-indigo-300' : 'text-indigo-900') : (theme === 'dark' ? 'text-gray-200' : 'text-gray-800')
+                          } ${a.status === 'postponed' ? 'line-through' : ''}`}>{a.title}</span>
                         </div>
                         <p className="text-[9px] font-bold text-gray-400 uppercase tracking-tighter">
                           {format(parseSafeDate(a.startDate), 'dd MMM')} - {format(parseSafeDate(a.endDate), 'dd MMM')} 
                         </p>
 
                         {isSelected && (
-                          <div className="mt-3 flex flex-col gap-2 p-2 bg-gray-50 rounded-xl border border-gray-100 animate-in fade-in zoom-in-95 duration-200" onClick={(e) => e.stopPropagation()}>
+                          <div className={`mt-3 flex flex-col gap-2 p-2 rounded-xl border animate-in fade-in zoom-in-95 duration-200 ${
+                            theme === 'dark' ? 'bg-gray-800 border-gray-600' : 'bg-gray-50 border-gray-100'
+                          }`} onClick={(e) => e.stopPropagation()}>
                             {a.status === 'active' && (
                               <>
                                 <div className="space-y-1">
@@ -583,7 +608,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
                                   <div className="flex gap-1">
                                     <input 
                                       type="date" 
-                                      className="flex-1 text-[9px] p-2 border border-gray-200 rounded-lg bg-white" 
+                                      className={`flex-1 text-[9px] p-2 rounded-lg ${theme === 'dark' ? 'bg-gray-700 border border-gray-600 text-white' : 'bg-white border border-gray-200'}`} 
                                       value={postponeDate}
                                       onChange={(e) => setPostponeDate(e.target.value)}
                                     />
@@ -629,14 +654,18 @@ export const Sidebar: React.FC<SidebarProps> = ({
         </div>
 
         {/* 4. MES DE TRABAJO */}
-        <div className="border-b border-gray-50 pb-2">
+        <div className={`border-b pb-2 ${theme === 'dark' ? 'border-gray-700' : 'border-gray-50'}`}>
           <SectionHeader id="month" icon={CalendarIcon} title="Mes de trabajo" />
           {openSections.month && (
             <div className="p-3 grid grid-cols-4 gap-2 animate-in fade-in slide-in-from-top-1 duration-200">
               {months.map((m, idx) => (
                 <button
                   key={m} onClick={() => setSelectedMonth(idx)}
-                  className={`text-[9px] py-2 rounded-lg font-black transition-all ${selectedMonth === idx ? 'bg-indigo-600 text-white shadow-lg shadow-indigo-100' : 'bg-gray-50 text-gray-400 hover:bg-indigo-50 hover:text-indigo-600'}`}
+                  className={`text-[9px] py-2 rounded-lg font-black transition-all ${
+                    selectedMonth === idx 
+                      ? (theme === 'dark' ? 'bg-indigo-600 text-white shadow-lg' : 'bg-indigo-600 text-white shadow-lg shadow-indigo-100') 
+                      : (theme === 'dark' ? 'bg-gray-700 text-gray-400 hover:bg-gray-600 hover:text-indigo-400' : 'bg-gray-50 text-gray-400 hover:bg-indigo-50 hover:text-indigo-600')
+                    }`}
                 >
                   {m.substring(0, 3)}
                 </button>
@@ -646,13 +675,15 @@ export const Sidebar: React.FC<SidebarProps> = ({
         </div>
 
         {/* 5. INTELIGENCIA ARTIFICIAL */}
-        <div className="border-b border-gray-50 pb-2">
+        <div className={`border-b pb-2 ${theme === 'dark' ? 'border-gray-700' : 'border-gray-50'}`}>
           <SectionHeader id="ai" icon={Sparkles} title="Inteligencia Artificial" />
           {openSections.ai && (
             <div className="p-3 space-y-3 animate-in fade-in slide-in-from-top-1 duration-200">
               <textarea 
                 placeholder="Escribe: Ensayo general del 15 al 18 de Mayo..."
-                className="w-full h-24 p-3 bg-gray-50 border border-gray-100 rounded-xl text-[10px] outline-none focus:ring-2 focus:ring-indigo-500/20 resize-none font-medium"
+                className={`w-full h-24 p-3 border rounded-xl text-[10px] outline-none focus:ring-2 focus:ring-indigo-500/20 resize-none font-medium ${
+                  theme === 'dark' ? 'bg-gray-700 border-gray-600 text-white' : 'bg-gray-50 border-gray-100 text-gray-900'
+                }`}
                 value={aiInput} onChange={(e) => setAiInput(e.target.value)}
               />
               <button 
@@ -667,20 +698,22 @@ export const Sidebar: React.FC<SidebarProps> = ({
         </div>
 
         {/* 6. NOTIFICACIONES IA */}
-        <div className="border-b border-gray-50 pb-2">
+        <div className={`border-b pb-2 ${theme === 'dark' ? 'border-gray-700' : 'border-gray-50'}`}>
           <SectionHeader id="ai_notifs" icon={Bell} title="Notificaciones IA" count={aiNotifications.length} />
           {openSections.ai_notifs && (
             <div className="p-3 space-y-3 animate-in fade-in slide-in-from-top-1 duration-200 max-h-60 overflow-y-auto custom-scrollbar">
               {aiNotifications.length > 0 ? (
                 aiNotifications.map((notif) => (
-                  <div key={notif.id} className="p-3 bg-indigo-50/50 rounded-xl border border-indigo-100 flex flex-col gap-3 group transition-all hover:bg-indigo-50">
+                  <div key={notif.id} className={`p-3 rounded-xl border flex flex-col gap-3 group transition-all ${
+                    theme === 'dark' ? 'bg-indigo-900/10 border-indigo-900/30 hover:bg-indigo-900/20' : 'bg-indigo-50/50 border-indigo-100 hover:bg-indigo-50'
+                  }`}>
                     <div className="flex gap-3">
-                      <div className="shrink-0 p-2 bg-white rounded-lg text-indigo-600 shadow-sm self-start">
+                      <div className={`shrink-0 p-2 rounded-lg shadow-sm self-start ${theme === 'dark' ? 'bg-gray-700 text-indigo-400' : 'bg-white text-indigo-600'}`}>
                         {notif.relatedActivityIds && notif.relatedActivityIds.length > 0 ? <AlertTriangle size={12} /> : <Sparkles size={12} />}
                       </div>
                       <div className="space-y-1 flex-1">
-                        <p className="text-[10px] font-bold text-indigo-900 leading-relaxed">{notif.message.replace('IA: ', '')}</p>
-                        <p className="text-[8px] font-black uppercase text-indigo-400 tracking-widest">
+                        <p className={`text-[10px] font-bold leading-relaxed ${theme === 'dark' ? 'text-indigo-200' : 'text-indigo-900'}`}>{notif.message.replace('IA: ', '')}</p>
+                        <p className={`text-[8px] font-black uppercase tracking-widest ${theme === 'dark' ? 'text-indigo-500' : 'text-indigo-400'}`}>
                           {format(new Date(notif.timestamp), 'p', { locale: es })}
                         </p>
                       </div>
@@ -703,13 +736,13 @@ export const Sidebar: React.FC<SidebarProps> = ({
         </div>
 
         {/* 7. IMPORTAR EVENTOS */}
-        <div className="border-b border-gray-50 pb-2">
+        <div className={`border-b pb-2 ${theme === 'dark' ? 'border-gray-700' : 'border-gray-50'}`}>
           <SectionHeader id="import" icon={FileUp} title="Importar Eventos" />
           {openSections.import && (
             <div className="p-3 space-y-4 animate-in fade-in slide-in-from-top-1 duration-200">
-              <div className="flex bg-gray-100 p-1 rounded-xl">
-                <button onClick={() => setImportMode('text')} className={`flex-1 py-1.5 rounded-lg text-[10px] font-black uppercase transition-all ${importMode === 'text' ? 'bg-white shadow-sm text-indigo-600' : 'text-gray-400'}`}>Texto</button>
-                <button onClick={() => setImportMode('file')} className={`flex-1 py-1.5 rounded-lg text-[10px] font-black uppercase transition-all ${importMode === 'file' ? 'bg-white shadow-sm text-indigo-600' : 'text-gray-400'}`}>Archivo</button>
+              <div className={`flex p-1 rounded-xl ${theme === 'dark' ? 'bg-gray-700' : 'bg-gray-100'}`}>
+                <button onClick={() => setImportMode('text')} className={`flex-1 py-1.5 rounded-lg text-[10px] font-black uppercase transition-all ${importMode === 'text' ? (theme === 'dark' ? 'bg-gray-600 text-indigo-400 shadow-sm' : 'bg-white shadow-sm text-indigo-600') : 'text-gray-400'}`}>Texto</button>
+                <button onClick={() => setImportMode('file')} className={`flex-1 py-1.5 rounded-lg text-[10px] font-black uppercase transition-all ${importMode === 'file' ? (theme === 'dark' ? 'bg-gray-600 text-indigo-400 shadow-sm' : 'bg-white shadow-sm text-indigo-600') : 'text-gray-400'}`}>Archivo</button>
               </div>
               {importMode === 'text' ? (
                 <div className="space-y-2">
@@ -720,14 +753,20 @@ export const Sidebar: React.FC<SidebarProps> = ({
                   <textarea 
                     value={csvTextInput} onChange={e => setCsvTextInput(e.target.value)}
                     placeholder="Fecha Ini, Fecha Fin, Actividad, Programa, Categoría..."
-                    className="w-full h-32 p-3 bg-gray-50 border border-gray-100 rounded-xl text-[10px] font-mono outline-none"
+                    className={`w-full h-32 p-3 border rounded-xl text-[10px] font-mono outline-none ${
+                      theme === 'dark' ? 'bg-gray-700 border-gray-600 text-white' : 'bg-gray-50 border-gray-100 text-gray-900'
+                    }`}
                   />
-                  <button onClick={() => processCsv(csvTextInput)} className="w-full py-3 bg-gray-900 text-white rounded-xl text-[10px] font-black uppercase tracking-widest hover:bg-black transition-all">Importar Registros</button>
+                  <button onClick={() => processCsv(csvTextInput)} className={`w-full py-3 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all ${
+                    theme === 'dark' ? 'bg-indigo-600 text-white hover:bg-indigo-700' : 'bg-gray-900 text-white hover:bg-black'
+                  }`}>Importar Registros</button>
                 </div>
               ) : (
-                <div onClick={() => fileInputRef.current?.click()} className="p-6 border-2 border-dashed border-indigo-100 bg-indigo-50/20 rounded-2xl flex flex-col items-center gap-2 cursor-pointer group hover:bg-indigo-50 transition-all">
+                <div onClick={() => fileInputRef.current?.click()} className={`p-6 border-2 border-dashed rounded-2xl flex flex-col items-center gap-2 cursor-pointer group transition-all ${
+                  theme === 'dark' ? 'border-gray-700 bg-gray-700/30 hover:bg-gray-700/50' : 'border-indigo-100 bg-indigo-50/20 hover:bg-indigo-50'
+                }`}>
                   <FileSpreadsheet className="text-indigo-400 group-hover:scale-110 transition-all" size={32} />
-                  <span className="text-[10px] font-black text-indigo-600 uppercase">Subir archivo .CSV</span>
+                  <span className={`text-[10px] font-black uppercase ${theme === 'dark' ? 'text-indigo-400' : 'text-indigo-600'}`}>Subir archivo .CSV</span>
                   <input type="file" ref={fileInputRef} className="hidden" accept=".csv,.txt" onChange={handleCsvUpload} />
                 </div>
               )}
@@ -745,10 +784,14 @@ export const Sidebar: React.FC<SidebarProps> = ({
                 <Sparkles size={14} />
               </button>
               <div className="grid grid-cols-2 gap-3">
-                <button disabled={isExporting} onClick={handleExportPNG} className="flex items-center justify-center gap-2 py-3 bg-indigo-50 text-indigo-600 rounded-xl font-black text-[10px] uppercase hover:bg-indigo-100 transition-all">
+                <button disabled={isExporting} onClick={handleExportPNG} className={`flex items-center justify-center gap-2 py-3 rounded-xl font-black text-[10px] uppercase transition-all ${
+                  theme === 'dark' ? 'bg-gray-700 text-indigo-400 hover:bg-gray-600' : 'bg-indigo-50 text-indigo-600 hover:bg-indigo-100'
+                }`}>
                   <Download size={14} /> PNG
                 </button>
-                <button disabled={isExporting} onClick={handleExportPDF} className="flex items-center justify-center gap-2 py-3 bg-gray-900 text-white rounded-xl font-black text-[10px] uppercase hover:bg-black transition-all">
+                <button disabled={isExporting} onClick={handleExportPDF} className={`flex items-center justify-center gap-2 py-3 rounded-xl font-black text-[10px] uppercase transition-all ${
+                  theme === 'dark' ? 'bg-indigo-900/30 text-indigo-300 hover:bg-indigo-900/50' : 'bg-gray-900 text-white hover:bg-black'
+                }`}>
                   <FileText size={14} /> PDF
                 </button>
               </div>
@@ -757,7 +800,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
         </div>
 
         {/* INSTITUTIONAL SETTINGS */}
-        <div className="mt-8 pt-4 border-t border-gray-50 opacity-40 hover:opacity-100 transition-opacity">
+        <div className={`mt-8 pt-4 border-t opacity-40 hover:opacity-100 transition-opacity ${theme === 'dark' ? 'border-gray-700' : 'border-gray-50'}`}>
            <SectionHeader id="institution" icon={Settings} title="Ajustes Institucionales" />
            {openSections.institution && (
              <div className="p-3 space-y-4 animate-in fade-in slide-in-from-top-1 duration-200">
@@ -766,13 +809,17 @@ export const Sidebar: React.FC<SidebarProps> = ({
                  <input 
                   type="text" value={state.config.institutionName}
                   onChange={e => onUpdateConfig({ institutionName: e.target.value })}
-                  className="w-full px-3 py-2 border border-gray-100 rounded-lg text-[10px] font-bold"
+                  className={`w-full px-3 py-2 border rounded-lg text-[10px] font-bold ${
+                    theme === 'dark' ? 'bg-gray-700 border-gray-600 text-white' : 'bg-white border-gray-100 text-gray-900'
+                  }`}
                  />
                </div>
                <div className="space-y-1">
                  <label className="text-[9px] font-black text-gray-400 uppercase">Logo Principal</label>
-                 <label className="flex items-center justify-center w-full py-3 border border-dashed border-gray-200 rounded-lg cursor-pointer hover:border-indigo-400">
-                   <span className="text-[10px] font-black uppercase text-indigo-600">Cambiar Imagen</span>
+                 <label className={`flex items-center justify-center w-full py-3 border border-dashed rounded-lg cursor-pointer transition-all ${
+                   theme === 'dark' ? 'border-gray-600 hover:border-indigo-500' : 'border-gray-200 hover:border-indigo-400'
+                 }`}>
+                   <span className={`text-[10px] font-black uppercase ${theme === 'dark' ? 'text-indigo-400' : 'text-indigo-600'}`}>Cambiar Imagen</span>
                    <input type="file" className="hidden" onChange={handleLogoUpload} accept="image/*" />
                  </label>
                </div>
@@ -781,11 +828,13 @@ export const Sidebar: React.FC<SidebarProps> = ({
         </div>
       </div>
       
-      <div className="mt-auto p-6 bg-gray-50/50">
+      <div className={`mt-auto p-6 transition-colors ${theme === 'dark' ? 'bg-gray-800/50' : 'bg-gray-50/50'}`}>
          <div className="flex items-center gap-3">
-            <div className="w-8 h-8 rounded-full bg-indigo-100 flex items-center justify-center text-indigo-600 font-black text-[10px]">SC</div>
+            <div className={`w-8 h-8 rounded-full flex items-center justify-center font-black text-[10px] ${
+              theme === 'dark' ? 'bg-indigo-900/40 text-indigo-400' : 'bg-indigo-100 text-indigo-600'
+            }`}>SC</div>
             <div>
-              <p className="text-[9px] font-black text-gray-900 uppercase leading-none">Sinfonía Cloud</p>
+              <p className={`text-[9px] font-black uppercase leading-none ${theme === 'dark' ? 'text-gray-200' : 'text-gray-900'}`}>Sinfonía Cloud</p>
               <p className="text-[8px] font-bold text-gray-400 uppercase tracking-widest mt-0.5">V 2.5 Active</p>
             </div>
          </div>
@@ -793,3 +842,6 @@ export const Sidebar: React.FC<SidebarProps> = ({
     </div>
   );
 };
+
+// Fixed incorrect default export from App to Sidebar
+export default Sidebar;

@@ -13,10 +13,13 @@ import {
 import { format, isWithinInterval, addDays, isSameDay } from 'date-fns';
 import { es } from 'date-fns/locale';
 import { analyzeCalendarConflicts } from './services/geminiService';
+import { ThemeToggle } from './components/ThemeToggle';
+import { useTheme } from './contexts/ThemeContext';
 
 const STORAGE_KEY = 'sinfonia_calendar_data';
 
 const App: React.FC = () => {
+  const { theme } = useTheme();
   const [state, setState] = useState<CalendarState>(() => {
     const saved = localStorage.getItem(STORAGE_KEY);
     if (saved) return JSON.parse(saved);
@@ -310,7 +313,11 @@ const App: React.FC = () => {
   ];
 
   return (
-    <div className="flex h-screen w-screen bg-[#f3f4f6] overflow-hidden font-sans">
+    <div className={`flex h-screen w-screen overflow-hidden font-sans transition-colors duration-300 ${
+      theme === 'dark' 
+        ? 'bg-gray-900 text-gray-100' 
+        : 'bg-[#f3f4f6] text-gray-900'
+    }`}>
       
       {/* Sidebar Area */}
       <div 
@@ -342,21 +349,30 @@ const App: React.FC = () => {
       </div>
 
       {/* Main App */}
-      <div className={`flex-1 flex flex-col transition-all duration-500 bg-white relative`}>
-        <div className="bg-white border-b border-gray-50 h-16 flex items-center justify-between px-8 shrink-0 relative z-10">
+      <div className={`flex-1 flex flex-col transition-all duration-500 relative`}>
+        <div className={`border-b h-16 flex items-center justify-between px-8 shrink-0 relative z-10 transition-colors duration-300 ${
+          theme === 'dark' 
+            ? 'bg-gray-800 border-gray-700' 
+            : 'bg-white border-gray-50'
+        }`}>
            <div className="flex items-center gap-4">
               <button 
                 onClick={() => setIsSidebarCollapsed(!isSidebarCollapsed)} 
-                className="hidden md:flex p-2 hover:bg-gray-100 rounded-full text-indigo-600 transition-all bg-indigo-50"
+                className={`hidden md:flex p-2 rounded-full transition-all ${
+                  theme === 'dark' ? 'hover:bg-gray-700 text-indigo-400 bg-gray-700/50' : 'hover:bg-gray-100 text-indigo-600 bg-indigo-50'
+                }`}
                 title={isSidebarCollapsed ? "Mostrar menú" : "Ocultar menú"}
               >
                 {isSidebarCollapsed ? <ChevronRight size={20} /> : <ChevronLeft size={20} />}
               </button>
               <button onClick={() => setIsSidebarOpen(true)} className="md:hidden p-2"><Menu /></button>
-              <h1 className="text-[13px] font-black text-gray-900 uppercase tracking-[0.2em]">{state.config.institutionName}</h1>
+              <h1 className={`text-[13px] font-black uppercase tracking-[0.2em] ${theme === 'dark' ? 'text-gray-100' : 'text-gray-900'}`}>{state.config.institutionName}</h1>
            </div>
            
-           <div className="flex items-center gap-4">
+           <div className="flex items-center gap-3">
+              {/* Theme Toggle Button */}
+              <ThemeToggle size="md" />
+
               <div className="relative group">
                 <button 
                   onClick={runAiAnalysis}
@@ -369,19 +385,25 @@ const App: React.FC = () => {
                   Analizar Agenda
                 </button>
                 {showAiHelp && (
-                  <div className="absolute top-full mt-2 right-0 w-64 bg-gray-900 text-white p-4 rounded-2xl shadow-2xl text-[10px] font-bold leading-relaxed z-[100] animate-in fade-in slide-in-from-top-2 duration-200">
+                  <div className={`absolute top-full mt-2 right-0 w-64 p-4 rounded-2xl shadow-2xl text-[10px] font-bold leading-relaxed z-[100] animate-in fade-in slide-in-from-top-2 duration-200 ${
+                    theme === 'dark' ? 'bg-gray-700 text-gray-100' : 'bg-gray-900 text-white'
+                  }`}>
                     <p>La IA analiza conflictos de horarios, sobrecarga de ensayos y sugiere mejoras logísticas para tus programas musicales.</p>
                   </div>
                 )}
               </div>
-              <button onClick={() => setShowNotificationLog(true)} className="p-2.5 text-gray-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-full transition-all relative">
+              <button onClick={() => setShowNotificationLog(true)} className={`p-2.5 rounded-full transition-all relative ${
+                theme === 'dark' ? 'text-gray-400 hover:text-indigo-400 hover:bg-gray-700' : 'text-gray-400 hover:text-indigo-600 hover:bg-indigo-50'
+              }`}>
                  <History size={22} />
                  {state.notifications.length > 0 && <span className="absolute top-2 right-2 w-2 h-2 bg-red-500 rounded-full border-2 border-white"></span>}
               </button>
            </div>
         </div>
 
-        <div className="flex-1 bg-gray-100/50 p-4 relative overflow-hidden">
+        <div className={`flex-1 p-4 relative overflow-hidden transition-colors duration-300 ${
+          theme === 'dark' ? 'bg-gray-900' : 'bg-gray-100/50'
+        }`}>
           <CalendarCanvas 
             state={state} 
             selectedMonth={selectedMonth} 
@@ -398,10 +420,14 @@ const App: React.FC = () => {
       {/* MODAL REDISEÑADO: Personalizar Día y Eventos */}
       {editingDate && (
         <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-[150] p-4 backdrop-blur-[2px] animate-in fade-in duration-300">
-          <div className="bg-white w-full max-w-xl rounded-[2.5rem] shadow-2xl p-10 relative flex flex-col animate-in zoom-in-95 slide-in-from-bottom-10 duration-500">
+          <div className={`w-full max-w-xl rounded-[2.5rem] shadow-2xl p-10 relative flex flex-col animate-in zoom-in-95 slide-in-from-bottom-10 duration-500 ${
+            theme === 'dark' ? 'bg-gray-800 text-gray-100' : 'bg-white text-gray-900'
+          }`}>
             <button 
               onClick={() => {setEditingDate(null); setEditingDayId(null);}} 
-              className="absolute top-8 right-8 text-gray-400 hover:text-gray-900 p-2 hover:bg-gray-100 rounded-full transition-all"
+              className={`absolute top-8 right-8 p-2 rounded-full transition-all ${
+                theme === 'dark' ? 'text-gray-400 hover:text-gray-200 hover:bg-gray-700' : 'text-gray-400 hover:text-gray-900 hover:bg-gray-100'
+              }`}
             >
               <X size={24} />
             </button>
@@ -411,7 +437,7 @@ const App: React.FC = () => {
                   <CalendarClock size={28} />
                </div>
                <div>
-                  <h2 className="text-[26px] font-black text-gray-900 tracking-tighter leading-none">Gestión del Día</h2>
+                  <h2 className="text-[26px] font-black tracking-tighter leading-none">Gestión del Día</h2>
                   <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mt-1">Configurar celda y cronograma</p>
                </div>
             </div>
@@ -419,10 +445,12 @@ const App: React.FC = () => {
             <div className="space-y-8 overflow-y-auto pr-4 custom-scrollbar max-h-[65vh]">
                
                {/* SECCIÓN 1: EVENTO / ACTIVIDAD */}
-               <div className="p-6 bg-indigo-50/30 rounded-[2rem] border border-indigo-100/50 space-y-5">
+               <div className={`p-6 rounded-[2rem] border space-y-5 ${
+                 theme === 'dark' ? 'bg-indigo-900/10 border-indigo-800/30' : 'bg-indigo-50/30 border-indigo-100/50'
+               }`}>
                   <div className="flex items-center gap-2 px-1">
                     <PlusCircle size={14} className="text-indigo-600" />
-                    <span className="text-[10px] font-black text-indigo-900 uppercase tracking-widest">Actividad del Cronograma</span>
+                    <span className={`text-[10px] font-black uppercase tracking-widest ${theme === 'dark' ? 'text-indigo-300' : 'text-indigo-900'}`}>Actividad del Cronograma</span>
                   </div>
                   
                   <div className="space-y-3">
@@ -431,7 +459,9 @@ const App: React.FC = () => {
                       type="text" value={modalActivityTitle}
                       onChange={(e) => setModalActivityTitle(e.target.value)}
                       placeholder="Ej: Ensayo General / Concierto Gala"
-                      className="w-full px-5 py-4 border border-indigo-100 rounded-2xl outline-none focus:ring-2 focus:ring-indigo-500/20 text-sm font-bold shadow-inner bg-white"
+                      className={`w-full px-5 py-4 rounded-2xl outline-none focus:ring-2 focus:ring-indigo-500/20 text-sm font-bold shadow-inner ${
+                        theme === 'dark' ? 'bg-gray-700 border-gray-600 text-white placeholder-gray-500' : 'bg-white border-indigo-100 text-gray-900'
+                      }`}
                     />
                   </div>
 
@@ -445,7 +475,9 @@ const App: React.FC = () => {
                            className={`py-3 px-4 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all border ${
                              modalActivityProgram === p 
                              ? 'bg-indigo-600 text-white border-indigo-600 shadow-lg' 
-                             : 'bg-white text-gray-400 border-gray-100 hover:border-indigo-200'
+                             : theme === 'dark' 
+                               ? 'bg-gray-700 text-gray-400 border-gray-600 hover:border-indigo-800'
+                               : 'bg-white text-gray-400 border-gray-100 hover:border-indigo-200'
                            }`}
                          >
                            {p}
@@ -465,7 +497,9 @@ const App: React.FC = () => {
                    <input 
                     type="date" value={currentDayStyle?.startDate || editingDate}
                     onChange={(e) => updateDayStyle(editingDayId, editingDate!, { startDate: e.target.value })}
-                    className="w-full px-5 py-4 border border-gray-100 rounded-2xl text-[11px] font-bold bg-gray-50/50"
+                    className={`w-full px-5 py-4 border rounded-2xl text-[11px] font-bold ${
+                      theme === 'dark' ? 'bg-gray-700 border-gray-600 text-white' : 'bg-gray-50/50 border-gray-100 text-gray-900'
+                    }`}
                    />
                  </div>
                  <div className="space-y-3">
@@ -478,7 +512,9 @@ const App: React.FC = () => {
                       type="date" value={currentDayStyle?.endDate || ''}
                       onChange={(e) => updateDayStyle(editingDayId, editingDate!, { endDate: e.target.value })}
                       onFocus={handleEndDateFocus}
-                      className="w-full px-5 py-4 pr-12 border border-gray-100 rounded-2xl text-[11px] font-bold bg-gray-50/50"
+                      className={`w-full px-5 py-4 pr-12 border rounded-2xl text-[11px] font-bold ${
+                        theme === 'dark' ? 'bg-gray-700 border-gray-600 text-white' : 'bg-gray-50/50 border-gray-100 text-gray-900'
+                      }`}
                      />
                      {currentDayStyle?.endDate && (
                        <button
@@ -501,14 +537,16 @@ const App: React.FC = () => {
                     <span className="text-[10px] font-black text-gray-400 uppercase tracking-widest">Apariencia en el Canvas</span>
                   </div>
 
-                  <div className="bg-red-50/50 p-5 rounded-[1.5rem] flex items-center justify-between border border-red-100/50 group hover:bg-red-50 transition-all cursor-pointer" onClick={() => updateDayStyle(editingDayId, editingDate, { isHoliday: !currentDayStyle?.isHoliday })}>
+                  <div className={`p-5 rounded-[1.5rem] flex items-center justify-between border transition-all cursor-pointer ${
+                    theme === 'dark' ? 'bg-red-900/10 border-red-900/30' : 'bg-red-50/50 border-red-100/50 hover:bg-red-50'
+                  }`} onClick={() => updateDayStyle(editingDayId, editingDate, { isHoliday: !currentDayStyle?.isHoliday })}>
                     <div className="flex items-center gap-4">
                       <div className="bg-red-500 p-2.5 rounded-xl shadow-lg shadow-red-100">
                         <Flag className="text-white" size={18} />
                       </div>
-                      <span className="text-[11px] font-black text-red-900 uppercase tracking-widest">Día Feriado / No Laborable</span>
+                      <span className={`text-[11px] font-black uppercase tracking-widest ${theme === 'dark' ? 'text-red-300' : 'text-red-900'}`}>Día Feriado / No Laborable</span>
                     </div>
-                    <div className={`w-6 h-6 rounded-lg border-2 transition-all flex items-center justify-center ${currentDayStyle?.isHoliday ? 'bg-red-500 border-red-500' : 'border-red-200 bg-white'}`}>
+                    <div className={`w-6 h-6 rounded-lg border-2 transition-all flex items-center justify-center ${currentDayStyle?.isHoliday ? 'bg-red-500 border-red-500' : theme === 'dark' ? 'border-gray-600 bg-gray-700' : 'border-red-200 bg-white'}`}>
                       {currentDayStyle?.isHoliday && <CheckCircle2 className="text-white" size={14} />}
                     </div>
                   </div>
@@ -518,7 +556,9 @@ const App: React.FC = () => {
                     <select 
                         value={currentDayStyle?.categoryId || ''}
                         onChange={(e) => updateDayStyle(editingDayId, editingDate, { categoryId: e.target.value })}
-                        className="w-full px-5 py-4 border border-gray-100 rounded-2xl outline-none focus:ring-2 focus:ring-indigo-500/20 text-sm font-bold bg-gray-50/50"
+                        className={`w-full px-5 py-4 border rounded-2xl outline-none focus:ring-2 focus:ring-indigo-500/20 text-sm font-bold ${
+                          theme === 'dark' ? 'bg-gray-700 border-gray-600 text-white' : 'bg-gray-50/50 border-gray-100 text-gray-900'
+                        }`}
                     >
                       <option value="">Ninguna categoría</option>
                       {state.categories.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
@@ -527,7 +567,9 @@ const App: React.FC = () => {
 
                   <div className="space-y-4">
                       <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest block px-1">Biblioteca de Iconos</label>
-                      <div className="grid grid-cols-8 gap-3 bg-gray-50/50 p-6 rounded-[2rem] border border-gray-100">
+                      <div className={`grid grid-cols-8 gap-3 p-6 rounded-[2rem] border ${
+                        theme === 'dark' ? 'bg-gray-700 border-gray-600' : 'bg-gray-50/50 border-gray-100'
+                      }`}>
                         {ICONS_LIBRARY.map(item => (
                           <button 
                             key={item.id}
@@ -535,7 +577,7 @@ const App: React.FC = () => {
                             className={`aspect-square flex flex-col items-center justify-center rounded-2xl transition-all ${
                               currentDayStyle?.icon === item.emoji 
                               ? 'bg-white shadow-xl shadow-indigo-100/50 border border-indigo-100 scale-110 ring-2 ring-indigo-50' 
-                              : 'hover:bg-white hover:shadow-md hover:scale-105 opacity-60 hover:opacity-100'
+                              : theme === 'dark' ? 'hover:bg-gray-600 opacity-60 hover:opacity-100' : 'hover:bg-white hover:shadow-md hover:scale-105 opacity-60 hover:opacity-100'
                             }`}
                             title={item.id}
                           >

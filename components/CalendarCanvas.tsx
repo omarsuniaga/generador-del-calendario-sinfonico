@@ -8,6 +8,7 @@ import {
   CalendarClock, CheckCircle2, Hand, Grab, Zap, Star, LayoutGrid, 
   Calendar as CalendarIcon, Clock, ChevronRight, Circle 
 } from 'lucide-react';
+import { useTheme } from '../contexts/ThemeContext';
 
 interface CalendarCanvasProps {
   state: CalendarState;
@@ -41,6 +42,7 @@ export const CalendarCanvas: React.FC<CalendarCanvasProps> = ({
   onSelectActivity,
   onToggleComplete
 }) => {
+  const { theme } = useTheme();
   const containerRef = useRef<HTMLDivElement>(null);
   const calendarRef = useRef<HTMLDivElement>(null);
   
@@ -196,13 +198,17 @@ export const CalendarCanvas: React.FC<CalendarCanvasProps> = ({
       onMouseMove={handleMouseMove}
       onMouseUp={handleMouseUp}
       onMouseLeave={handleMouseUp}
-      className={`h-full w-full bg-[#374151] overflow-hidden flex items-start justify-start relative select-none ${isDraggingMode ? (isMouseDown ? 'cursor-grabbing' : 'cursor-grab') : 'cursor-default'}`}
+      className={`h-full w-full overflow-hidden flex items-start justify-start relative select-none transition-colors duration-300 ${
+        theme === 'dark' ? 'bg-gray-900' : 'bg-[#374151]'
+      } ${isDraggingMode ? (isMouseDown ? 'cursor-grabbing' : 'cursor-grab') : 'cursor-default'}`}
     >
       {/* Floating Toolbar Controls */}
-      <div className="absolute bottom-6 right-6 z-[100] flex items-center bg-white/95 backdrop-blur-xl p-1.5 rounded-[1.5rem] shadow-[0_20px_50px_-10px_rgba(0,0,0,0.5)] border border-white/20 gap-1 animate-in slide-in-from-bottom-5 duration-700">
+      <div className={`absolute bottom-6 right-6 z-[100] flex items-center backdrop-blur-xl p-1.5 rounded-[1.5rem] shadow-[0_20px_50px_-10px_rgba(0,0,0,0.5)] border gap-1 animate-in slide-in-from-bottom-5 duration-700 ${
+        theme === 'dark' ? 'bg-gray-800/95 border-gray-700' : 'bg-white/95 border-white/20'
+      }`}>
         <button 
           onClick={() => updateZoom(-0.15)} 
-          className="p-2.5 text-gray-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-xl transition-all"
+          className={`p-2.5 rounded-xl transition-all ${theme === 'dark' ? 'text-gray-400 hover:text-indigo-400 hover:bg-gray-700' : 'text-gray-400 hover:text-indigo-600 hover:bg-indigo-50'}`}
           title="Alejar"
         >
           <ZoomOut size={18} />
@@ -210,7 +216,7 @@ export const CalendarCanvas: React.FC<CalendarCanvasProps> = ({
 
         <button 
           onClick={() => setIsDraggingMode(!isDraggingMode)} 
-          className={`p-2.5 rounded-xl transition-all ${isDraggingMode ? 'bg-indigo-600 text-white shadow-lg' : 'text-gray-400 hover:text-indigo-600 hover:bg-indigo-50'}`}
+          className={`p-2.5 rounded-xl transition-all ${isDraggingMode ? 'bg-indigo-600 text-white shadow-lg' : (theme === 'dark' ? 'text-gray-400 hover:text-indigo-400 hover:bg-gray-700' : 'text-gray-400 hover:text-indigo-600 hover:bg-indigo-50')}`}
           title="Modo Navegación (Arrastrar)"
         >
           {isDraggingMode ? <Grab size={18} /> : <Hand size={18} />}
@@ -218,7 +224,7 @@ export const CalendarCanvas: React.FC<CalendarCanvasProps> = ({
 
         <button 
           onClick={handleFitToScreen} 
-          className="p-2.5 text-indigo-600 bg-indigo-50 rounded-xl transition-all hover:bg-indigo-100"
+          className={`p-2.5 rounded-xl transition-all ${theme === 'dark' ? 'bg-indigo-900/40 text-indigo-400 hover:bg-indigo-900/60' : 'text-indigo-600 bg-indigo-50 hover:bg-indigo-100'}`}
           title="Ajustar a Pantalla"
         >
           <Maximize size={18} />
@@ -226,7 +232,7 @@ export const CalendarCanvas: React.FC<CalendarCanvasProps> = ({
 
         <button 
           onClick={() => updateZoom(0.15)} 
-          className="p-2.5 text-gray-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-xl transition-all"
+          className={`p-2.5 rounded-xl transition-all ${theme === 'dark' ? 'text-gray-400 hover:text-indigo-400 hover:bg-gray-700' : 'text-gray-400 hover:text-indigo-600 hover:bg-indigo-50'}`}
           title="Acercar"
         >
           <ZoomIn size={18} />
